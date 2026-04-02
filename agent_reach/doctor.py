@@ -82,10 +82,13 @@ def format_report(results: Dict[str, dict]) -> str:
     if config_path.exists() and sys.platform != "win32":
         try:
             mode = config_path.stat().st_mode
-            if mode & (stat.S_IRGRP | stat.S_IROTH):
+            # Check if group or others have read/write/execute permissions (0o077)
+            if mode & (stat.S_IRWXG | stat.S_IRWXO):
                 lines.append("")
-                lines.append("[!]  安全提示：config.yaml 权限过宽（其他用户可读）")
-                lines.append("   修复：chmod 600 ~/.agent-reach/config.yaml")
+                lines.append("🛡️ 安全警告: config.yaml 权限过宽")
+                lines.append("   该文件包含敏感凭据，当前允许其他用户访问。")
+                lines.append("   请运行以下命令修复:")
+                lines.append(f"   chmod 600 {config_path}")
         except OSError:
             pass
 
