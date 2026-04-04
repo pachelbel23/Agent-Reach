@@ -89,5 +89,32 @@ class TestConfig:
         if sys.platform != "win32":
             mode = config_file.stat().st_mode
             # File should be owner-only read/write (0o600)
-            assert not (mode & stat.S_IRGRP), "group read should not be set"
-            assert not (mode & stat.S_IROTH), "other read should not be set"
+            assert (mode & 0o777) == 0o600
+
+    def test_to_dict_masks_extended_sensitive(self, tmp_config):
+        sensitive_samples = {
+            "twitter_ct0": "ct0_value_123456789",
+            "bilibili_sessdata": "sessdata_value_123456789",
+            "bilibili_csrf": "csrf_value_123456789",
+            "xhs_cookie": "cookie_value_123456789",
+            "auth_token": "auth_token_value_123456789",
+        }
+        for k, v in sensitive_samples.items():
+            tmp_config.set(k, v)
+
+        masked = tmp_config.to_dict()
+        for k in sensitive_samples:
+            assert masked[k].endswith("...")
+            assert len(masked[k]) == 11  # 8 chars + 3 dots
+
+    def test_ensure_dir_restricted_permissions(self, tmp_path):
+        import stat
+        import sys
+        config_dir = tmp_path / "secure_dir"
+        config_file = config_dir / "config.yaml"
+        _config = Config(config_path=config_file)
+
+        if sys.platform != "win32":
+            mode = config_dir.stat().st_mode
+            # Directory should be owner-only (0o700)
+            assert (mode & 0o777) == 0o700

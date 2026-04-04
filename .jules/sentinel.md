@@ -1,0 +1,4 @@
+## 2025-05-22 - Enhanced Credential Masking and Config Directory Security
+**Vulnerability:** Sensitive credentials like 'ct0', 'sessdata', 'csrf', 'cookie', and 'auth' were not masked in the `Config.to_dict()` representation, and the configuration directory `~/.agent-reach` was created with default system permissions, potentially allowing other users on Unix-like systems to read sensitive data.
+**Learning:** Default directory creation permissions (`mkdir -p`) can be overly permissive on some systems. Sensitive social media session tokens (like Twitter's `ct0` or Bilibili's `SESSDATA`) are as critical as API keys and must be treated with the same level of protection.
+**Prevention:** Always set explicit restricted permissions (`0o700` for directories, `0o600` for files) when handling user credentials. Regularly audit the list of sensitive keywords used for masking in logs/UI to ensure all relevant authentication tokens are covered.

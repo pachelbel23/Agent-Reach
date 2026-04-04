@@ -35,8 +35,14 @@ class Config:
         self.load()
 
     def _ensure_dir(self):
-        """Create config directory if it doesn't exist."""
+        """Create config directory if it doesn't exist and set restricted permissions."""
         self.config_dir.mkdir(parents=True, exist_ok=True)
+        # On Unix-like systems, set restricted permissions (0o700) for security.
+        try:
+            os.chmod(self.config_dir, 0o700)
+        except OSError:
+            # Fallback for platforms like Windows where chmod is not fully supported.
+            pass
 
     def load(self):
         """Load config from YAML file."""
@@ -102,8 +108,13 @@ class Config:
     def to_dict(self) -> dict:
         """Return config as dict (masks sensitive values)."""
         masked = {}
+        # Sensitive keywords that trigger masking
+        sensitive_keys = (
+            "key", "token", "password", "proxy",
+            "ct0", "sessdata", "csrf", "cookie", "auth"
+        )
         for k, v in self.data.items():
-            if any(s in k.lower() for s in ("key", "token", "password", "proxy")):
+            if any(s in k.lower() for s in sensitive_keys):
                 masked[k] = f"{str(v)[:8]}..." if v else None
             else:
                 masked[k] = v
