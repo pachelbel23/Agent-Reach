@@ -102,8 +102,14 @@ class Config:
     def to_dict(self) -> dict:
         """Return config as dict (masks sensitive values)."""
         masked = {}
+        # Mask keys containing sensitive keywords to prevent accidental leakage in logs/CLI.
+        # Includes platform-specific session identifiers like 'ct0' (Twitter) and 'sessdata' (B站).
+        sensitive_keywords = (
+            "key", "token", "password", "proxy",
+            "ct0", "sessdata", "csrf", "cookie", "auth"
+        )
         for k, v in self.data.items():
-            if any(s in k.lower() for s in ("key", "token", "password", "proxy")):
+            if any(s in k.lower() for s in sensitive_keywords):
                 masked[k] = f"{str(v)[:8]}..." if v else None
             else:
                 masked[k] = v
