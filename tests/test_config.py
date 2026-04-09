@@ -75,9 +75,24 @@ class TestConfig:
     def test_to_dict_masks_sensitive(self, tmp_config):
         tmp_config.set("exa_api_key", "super-secret-key-12345")
         tmp_config.set("normal_setting", "visible")
+        tmp_config.set("twitter_ct0", "secret_ct0")
+        tmp_config.set("bilibili_sessdata", "secret_sessdata")
         masked = tmp_config.to_dict()
         assert masked["exa_api_key"] == "super-se..."
         assert masked["normal_setting"] == "visible"
+        assert masked["twitter_ct0"] == "secret_c..."
+        assert masked["bilibili_sessdata"] == "secret_s..."
+
+    def test_init_creates_dir_with_restricted_permissions(self, tmp_path):
+        import stat
+        import sys
+        config_dir = tmp_path / "secure_dir"
+        config_file = config_dir / "config.yaml"
+        _ = Config(config_path=config_file)
+
+        if sys.platform != "win32":
+            mode = config_dir.stat().st_mode
+            assert (mode & 0o777) == 0o700
 
     def test_save_creates_file_with_restricted_permissions(self, tmp_path):
         import stat
