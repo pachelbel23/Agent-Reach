@@ -6,6 +6,7 @@ Auto-creates directory on first use.
 """
 
 import os
+import sys
 from pathlib import Path
 from typing import Any, Optional
 
@@ -37,6 +38,12 @@ class Config:
     def _ensure_dir(self):
         """Create config directory if it doesn't exist."""
         self.config_dir.mkdir(parents=True, exist_ok=True)
+        # Ensure restricted permissions (owner only) for the config directory
+        if sys.platform != "win32":
+            try:
+                os.chmod(self.config_dir, 0o700)
+            except OSError:
+                pass
 
     def load(self):
         """Load config from YAML file."""
@@ -102,8 +109,13 @@ class Config:
     def to_dict(self) -> dict:
         """Return config as dict (masks sensitive values)."""
         masked = {}
+        # Platform-specific session identifiers and general credentials
+        sensitive_keywords = (
+            "key", "token", "password", "proxy",
+            "ct0", "sessdata", "csrf", "cookie", "auth", "jct"
+        )
         for k, v in self.data.items():
-            if any(s in k.lower() for s in ("key", "token", "password", "proxy")):
+            if any(s in k.lower() for s in sensitive_keywords):
                 masked[k] = f"{str(v)[:8]}..." if v else None
             else:
                 masked[k] = v
