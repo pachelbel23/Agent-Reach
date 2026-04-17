@@ -1,0 +1,4 @@
+## 2025-05-14 - Credential Leakage via Incomplete Masking and Open Directory Permissions
+**Vulnerability:** Platform-specific session identifiers (like `ct0` for Twitter and `sessdata` for Bilibili) escaped generic sensitive data masking in `Config.to_dict()`. Also, while configuration files had restricted permissions, the containing directory used system defaults, exposing the metadata and potentially the files to other local users.
+**Learning:** Keyword-based masking must be updated whenever new platforms are integrated. Directory-level permissions are as critical as file-level permissions for local configuration storage.
+**Prevention:** Maintain a centralized list of all platform-specific sensitive identifiers for masking. Explicitly enforce `0o700` permissions on configuration directories during both creation and initialization.
