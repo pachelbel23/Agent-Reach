@@ -1,0 +1,4 @@
+## 2025-05-22 - [Sensitive Data Leakage and Insecure Permissions]
+**Vulnerability:** Configuration files and directories were created with overly permissive permissions (default umask), and platform-specific sensitive identifiers like `ct0`, `sessdata`, and `csrf` were not masked in the `to_dict()` output.
+**Learning:** `os.open` with `O_CREAT` and a mode bitmask only sets permissions for *newly created* files. If the file already exists, its permissions are unchanged. An explicit `os.chmod` is necessary to enforce security on existing files. Additionally, data masking must be exhaustive for all platform-specific session identifiers to prevent accidental leakage in logs.
+**Prevention:** Always use explicit `os.chmod` after file operations that require specific permissions, and maintain a centralized list of sensitive keywords for masking that covers all integrated platforms.
