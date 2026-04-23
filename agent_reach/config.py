@@ -35,8 +35,10 @@ class Config:
         self.load()
 
     def _ensure_dir(self):
-        """Create config directory if it doesn't exist."""
+        """Create config directory if it doesn't exist with restricted permissions."""
         self.config_dir.mkdir(parents=True, exist_ok=True)
+        if os.name != "nt":
+            os.chmod(self.config_dir, 0o700)
 
     def load(self):
         """Load config from YAML file."""
@@ -60,6 +62,9 @@ class Config:
             )
             with os.fdopen(fd, "w", encoding="utf-8") as f:
                 yaml.dump(self.data, f, default_flow_style=False, allow_unicode=True)
+            # Ensure permissions are corrected even if the file already existed
+            if os.name != "nt":
+                os.chmod(self.config_path, 0o600)
         except OSError:
             # Fallback for Windows or other edge cases where os.open flags
             # are not fully supported.
@@ -102,8 +107,13 @@ class Config:
     def to_dict(self) -> dict:
         """Return config as dict (masks sensitive values)."""
         masked = {}
+        # Sensitive keywords that should be masked in the output.
+        # Includes platform-specific identifiers like 'ct0' (Twitter) or 'sessdata' (Bilibili).
+        sensitive_keywords = (
+            "key", "token", "password", "proxy", "ct0", "sessdata", "csrf", "cookie", "auth", "jct"
+        )
         for k, v in self.data.items():
-            if any(s in k.lower() for s in ("key", "token", "password", "proxy")):
+            if any(s in k.lower() for s in sensitive_keywords):
                 masked[k] = f"{str(v)[:8]}..." if v else None
             else:
                 masked[k] = v
