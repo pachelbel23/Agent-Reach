@@ -1,0 +1,4 @@
+## 2025-05-14 - [Insecure Configuration Storage and Masking Gaps]
+**Vulnerability:** Sensitive configuration data (API keys, session cookies) were stored with overly permissive file permissions (0o644), and platform-specific identifiers like `ct0` or `sessdata` were not masked in `Config.to_dict()`, leading to potential leakage.
+**Learning:** `os.open` with `O_CREAT` and a mode bitmask only sets permissions for newly created files; existing files keep their permissions. Additionally, security masking must account for platform-specific secret names beyond generic terms like "key" or "token".
+**Prevention:** Use explicit `os.chmod(..., 0o600)` on every save to ensure restricted permissions regardless of file history. Maintain a comprehensive list of sensitive keywords for masking that includes all session-related identifiers used by integrations.
