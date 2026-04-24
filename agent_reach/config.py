@@ -35,8 +35,14 @@ class Config:
         self.load()
 
     def _ensure_dir(self):
-        """Create config directory if it doesn't exist."""
-        self.config_dir.mkdir(parents=True, exist_ok=True)
+        """Create config directory if it doesn't exist with restricted permissions."""
+        if not self.config_dir.exists():
+            self.config_dir.mkdir(parents=True, exist_ok=True)
+            if os.name != "nt":
+                os.chmod(self.config_dir, 0o700)
+        elif os.name != "nt":
+            # Ensure existing directory also has correct permissions
+            os.chmod(self.config_dir, 0o700)
 
     def load(self):
         """Load config from YAML file."""
@@ -47,7 +53,7 @@ class Config:
             self.data = {}
 
     def save(self):
-        """Save config to YAML file."""
+        """Save config to YAML file with restricted permissions."""
         self._ensure_dir()
         # Create file with restricted permissions from the start to avoid
         # a race window where credentials are briefly world-readable.
@@ -60,6 +66,11 @@ class Config:
             )
             with os.fdopen(fd, "w", encoding="utf-8") as f:
                 yaml.dump(self.data, f, default_flow_style=False, allow_unicode=True)
+
+            # Explicitly chmod to 0o600 because os.open mode only applies to new files.
+            # If the file already existed with wider permissions, O_CREAT won't change them.
+            if os.name != "nt":
+                os.chmod(self.config_path, 0o600)
         except OSError:
             # Fallback for Windows or other edge cases where os.open flags
             # are not fully supported.
@@ -102,8 +113,12 @@ class Config:
     def to_dict(self) -> dict:
         """Return config as dict (masks sensitive values)."""
         masked = {}
+        sensitive_keywords = (
+            "key", "token", "password", "proxy",
+            "ct0", "sessdata", "csrf", "cookie", "auth", "jct"
+        )
         for k, v in self.data.items():
-            if any(s in k.lower() for s in ("key", "token", "password", "proxy")):
+            if any(s in k.lower() for s in sensitive_keywords):
                 masked[k] = f"{str(v)[:8]}..." if v else None
             else:
                 masked[k] = v
