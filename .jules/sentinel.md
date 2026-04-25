@@ -1,0 +1,4 @@
+## 2025-05-15 - [Sensitive Data Leakage and Insecure File Permissions]
+**Vulnerability:** Platform-specific session identifiers (e.g., 'ct0', 'sessdata', 'bili_jct') were not masked in `Config.to_dict()`, leading to potential data leakage in logs. Additionally, configuration file and directory permissions were not strictly enforced on multi-user systems.
+**Learning:** `os.open` with `O_CREAT` and a mode bitmask only sets permissions for *newly created* files; an explicit `os.chmod` is required to ensure restrictive permissions (0o600) on existing files during overwrites.
+**Prevention:** Always use explicit `os.chmod` after file operations that require strict permissions, and maintain a comprehensive list of sensitive keywords for data masking that includes all platform-specific session tokens.
