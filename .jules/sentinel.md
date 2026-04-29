@@ -1,0 +1,4 @@
+## 2025-05-14 - Incomplete Masking of Platform-Specific Session Identifiers
+**Vulnerability:** The `Config.to_dict()` method, used for logging and debugging, failed to mask platform-specific session identifiers such as `twitter_ct0`, `bilibili_sessdata`, and `xhs_cookie`. Only generic terms like 'key', 'token', and 'password' were being masked.
+**Learning:** Security masking logic must account for platform-specific naming conventions of sensitive data (e.g., 'ct0' for Twitter/X, 'sessdata' for Bilibili). Relying on generic security terms leaves site-specific secrets exposed.
+**Prevention:** Maintain a comprehensive and updated list of sensitive keywords that includes both generic and platform-specific identifiers. Ensure masking logic uses case-insensitive substring matching on these keywords.
