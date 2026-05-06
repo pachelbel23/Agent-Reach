@@ -73,11 +73,19 @@ class TestConfig:
         assert all(v is False for v in features.values())
 
     def test_to_dict_masks_sensitive(self, tmp_config):
+        # Long sensitive values
         tmp_config.set("exa_api_key", "super-secret-key-12345")
         tmp_config.set("normal_setting", "visible")
+        # Short sensitive values
+        tmp_config.set("twitter_ct0", "short")
+        # Platform specific keys
+        tmp_config.set("bilibili_sessdata", "long-sessdata-value")
+
         masked = tmp_config.to_dict()
         assert masked["exa_api_key"] == "super-se..."
         assert masked["normal_setting"] == "visible"
+        assert masked["twitter_ct0"] == "********"
+        assert masked["bilibili_sessdata"] == "long-ses..."
 
     def test_save_creates_file_with_restricted_permissions(self, tmp_path):
         import stat
