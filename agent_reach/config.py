@@ -37,6 +37,8 @@ class Config:
     def _ensure_dir(self):
         """Create config directory if it doesn't exist."""
         self.config_dir.mkdir(parents=True, exist_ok=True)
+        if os.name != "nt":
+            os.chmod(self.config_dir, 0o700)
 
     def load(self):
         """Load config from YAML file."""
@@ -65,6 +67,11 @@ class Config:
             # are not fully supported.
             with open(self.config_path, "w", encoding="utf-8") as f:
                 yaml.dump(self.data, f, default_flow_style=False, allow_unicode=True)
+
+        # Explicitly set permissions to 600 on Unix systems to ensure
+        # permissions are corrected even if the file already existed.
+        if os.name != "nt":
+            os.chmod(self.config_path, 0o600)
 
     def get(self, key: str, default: Any = None) -> Any:
         """Get a config value. Also checks environment variables (uppercase)."""
