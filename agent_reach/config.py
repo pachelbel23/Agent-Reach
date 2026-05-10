@@ -35,8 +35,13 @@ class Config:
         self.load()
 
     def _ensure_dir(self):
-        """Create config directory if it doesn't exist."""
+        """Create config directory if it doesn't exist with restricted permissions."""
         self.config_dir.mkdir(parents=True, exist_ok=True)
+        if os.name != 'nt':
+            try:
+                os.chmod(self.config_dir, 0o700)
+            except OSError:
+                pass
 
     def load(self):
         """Load config from YAML file."""
@@ -47,7 +52,7 @@ class Config:
             self.data = {}
 
     def save(self):
-        """Save config to YAML file."""
+        """Save config to YAML file with restricted permissions."""
         self._ensure_dir()
         # Create file with restricted permissions from the start to avoid
         # a race window where credentials are briefly world-readable.
@@ -60,6 +65,10 @@ class Config:
             )
             with os.fdopen(fd, "w", encoding="utf-8") as f:
                 yaml.dump(self.data, f, default_flow_style=False, allow_unicode=True)
+
+            # Explicitly set permissions again to handle cases where file already existed
+            if os.name != 'nt':
+                os.chmod(self.config_path, 0o600)
         except OSError:
             # Fallback for Windows or other edge cases where os.open flags
             # are not fully supported.
@@ -102,9 +111,15 @@ class Config:
     def to_dict(self) -> dict:
         """Return config as dict (masks sensitive values)."""
         masked = {}
+        # Sensitive keywords that should be masked in output
+        SENSITIVE_KEYWORDS = (
+            "key", "token", "password", "proxy", "secret",
+            "ct0", "sessdata", "csrf"
+        )
         for k, v in self.data.items():
-            if any(s in k.lower() for s in ("key", "token", "password", "proxy")):
-                masked[k] = f"{str(v)[:8]}..." if v else None
+            if v and any(s in k.lower() for s in SENSITIVE_KEYWORDS):
+                # Use a fixed mask to avoid leaking length or prefix of short secrets
+                masked[k] = "********"
             else:
                 masked[k] = v
         return masked
