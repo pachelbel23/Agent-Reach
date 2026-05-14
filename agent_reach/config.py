@@ -18,6 +18,11 @@ class Config:
     CONFIG_DIR = Path.home() / ".agent-reach"
     CONFIG_FILE = CONFIG_DIR / "config.yaml"
 
+    # Sensitive keywords to mask (case-insensitive substring match)
+    SENSITIVE_KEYWORDS = (
+        "key", "token", "password", "proxy", "ct0", "sessdata", "csrf", "secret", "cookie"
+    )
+
     # Feature → required config keys
     FEATURE_REQUIREMENTS = {
         "exa_search": ["exa_api_key"],
@@ -103,8 +108,8 @@ class Config:
         """Return config as dict (masks sensitive values)."""
         masked = {}
         for k, v in self.data.items():
-            if any(s in k.lower() for s in ("key", "token", "password", "proxy")):
-                masked[k] = f"{str(v)[:8]}..." if v else None
+            if any(s in k.lower() for s in self.SENSITIVE_KEYWORDS):
+                masked[k] = "********" if v else None
             else:
                 masked[k] = v
         return masked
