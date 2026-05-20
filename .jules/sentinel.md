@@ -1,0 +1,4 @@
+## 2025-05-22 - [Harden Config Permissions and Masking]
+**Vulnerability:** Insecure configuration file permissions and incomplete sensitive data masking. Previously, `os.open` with a mode was used, but it didn't correct permissions of existing files. Masking was also partial, potentially leaking secret information.
+**Learning:** `os.open` with `O_CREAT` and a mode bitmask only sets permissions for newly created files; it does not modify permissions of an existing file. An explicit `os.chmod` is required to ensure restrictive permissions on overwrites. Partial masking (e.g., `str(v)[:8]...`) can still leak enough data to be dangerous.
+**Prevention:** Always use explicit `os.chmod` after file operations that require specific permissions. Use constant-length masks for sensitive data to avoid leaking the original secret's length.
