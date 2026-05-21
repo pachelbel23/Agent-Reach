@@ -1,0 +1,4 @@
+## 2025-05-22 - [Data Leakage] Incomplete masking of platform-specific secrets
+**Vulnerability:** The `Config.to_dict()` method, used for displaying configuration, failed to mask platform-specific session identifiers like `ct0` (Twitter) and `sessdata` (Bilibili). Additionally, it used partial masking (showing the first 8 characters), which could leak enough of a secret to be useful in some contexts or allow for length estimation.
+**Learning:** Security masking must account for platform-specific naming conventions, not just generic terms like "key" or "token". Partial masking is often insufficient and should be replaced by a fixed-length mask.
+**Prevention:** Maintain a centralized list of sensitive keywords and use a fixed string (e.g., `********`) for masking. All new platform integrations must have their sensitive keys added to this list.
