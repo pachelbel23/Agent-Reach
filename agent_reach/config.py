@@ -6,6 +6,7 @@ Auto-creates directory on first use.
 """
 
 import os
+import stat
 from pathlib import Path
 from typing import Any, Optional
 
@@ -17,6 +18,9 @@ class Config:
 
     CONFIG_DIR = Path.home() / ".agent-reach"
     CONFIG_FILE = CONFIG_DIR / "config.yaml"
+
+    # Masking these keywords in to_dict()
+    SENSITIVE_KEYWORDS = ("key", "token", "password", "proxy", "ct0", "sessdata", "csrf", "secret", "cookie")
 
     # Feature → required config keys
     FEATURE_REQUIREMENTS = {
@@ -37,6 +41,12 @@ class Config:
     def _ensure_dir(self):
         """Create config directory if it doesn't exist."""
         self.config_dir.mkdir(parents=True, exist_ok=True)
+        # Enforce 0o700 permissions on Unix
+        if os.name != "nt":
+            try:
+                os.chmod(self.config_dir, 0o700)
+            except OSError:
+                pass
 
     def load(self):
         """Load config from YAML file."""
@@ -52,7 +62,6 @@ class Config:
         # Create file with restricted permissions from the start to avoid
         # a race window where credentials are briefly world-readable.
         try:
-            import stat
             fd = os.open(
                 str(self.config_path),
                 os.O_WRONLY | os.O_CREAT | os.O_TRUNC,
@@ -60,6 +69,12 @@ class Config:
             )
             with os.fdopen(fd, "w", encoding="utf-8") as f:
                 yaml.dump(self.data, f, default_flow_style=False, allow_unicode=True)
+            # Ensure permissions are corrected even if file existed
+            if os.name != "nt":
+                try:
+                    os.chmod(self.config_path, 0o600)
+                except OSError:
+                    pass
         except OSError:
             # Fallback for Windows or other edge cases where os.open flags
             # are not fully supported.
@@ -103,8 +118,9 @@ class Config:
         """Return config as dict (masks sensitive values)."""
         masked = {}
         for k, v in self.data.items():
-            if any(s in k.lower() for s in ("key", "token", "password", "proxy")):
-                masked[k] = f"{str(v)[:8]}..." if v else None
+            if any(s in k.lower() for s in self.SENSITIVE_KEYWORDS):
+                # Use a fixed mask to avoid leaking secret length or prefix
+                masked[k] = "********" if v else None
             else:
                 masked[k] = v
         return masked
