@@ -2,6 +2,8 @@
 """Tests for Agent Reach config module."""
 
 import os
+import stat
+import sys
 import tempfile
 from pathlib import Path
 
@@ -74,14 +76,21 @@ class TestConfig:
 
     def test_to_dict_masks_sensitive(self, tmp_config):
         tmp_config.set("exa_api_key", "super-secret-key-12345")
+        tmp_config.set("twitter_ct0", "sensitive-ct0-value")
+        tmp_config.set("bilibili_sessdata", "sensitive-sessdata")
+        tmp_config.set("xhs_cookie", "sensitive-cookie")
+        tmp_config.set("my_password", "p4ssw0rd")
         tmp_config.set("normal_setting", "visible")
+
         masked = tmp_config.to_dict()
-        assert masked["exa_api_key"] == "super-se..."
+        assert masked["exa_api_key"] == "********"
+        assert masked["twitter_ct0"] == "********"
+        assert masked["bilibili_sessdata"] == "********"
+        assert masked["xhs_cookie"] == "********"
+        assert masked["my_password"] == "********"
         assert masked["normal_setting"] == "visible"
 
     def test_save_creates_file_with_restricted_permissions(self, tmp_path):
-        import stat
-        import sys
         config_file = tmp_path / "secure_config.yaml"
         config = Config(config_path=config_file)
         config.set("secret_key", "my-secret")
@@ -89,5 +98,19 @@ class TestConfig:
         if sys.platform != "win32":
             mode = config_file.stat().st_mode
             # File should be owner-only read/write (0o600)
-            assert not (mode & stat.S_IRGRP), "group read should not be set"
-            assert not (mode & stat.S_IROTH), "other read should not be set"
+            assert (mode & 0o777) == 0o600
+
+    def test_save_fixes_existing_broad_permissions(self, tmp_path):
+        config_file = tmp_path / "broad_config.yaml"
+        # Pre-create file with broad permissions
+        config_file.write_text("initial: data")
+        os.chmod(config_file, 0o644)
+
+        if sys.platform != "win32":
+            assert (config_file.stat().st_mode & 0o777) == 0o644
+
+            config = Config(config_path=config_file)
+            config.set("key", "value")  # Triggers save()
+
+            # Should now be 0o600
+            assert (config_file.stat().st_mode & 0o777) == 0o600
