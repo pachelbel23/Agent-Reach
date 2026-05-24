@@ -76,18 +76,50 @@ class TestConfig:
         tmp_config.set("exa_api_key", "super-secret-key-12345")
         tmp_config.set("normal_setting", "visible")
         masked = tmp_config.to_dict()
-        assert masked["exa_api_key"] == "super-se..."
+        assert masked["exa_api_key"] == "********"
         assert masked["normal_setting"] == "visible"
+
+    def test_to_dict_masks_platform_secrets(self, tmp_config):
+        secrets = {
+            "twitter_ct0": "secret1",
+            "bilibili_sessdata": "secret2",
+            "bili_jct": "secret3",
+            "github_token": "secret4",
+            "my_password": "secret5",
+            "reddit_proxy": "secret6",
+            "my_secret": "secret7",
+            "my_cookie": "secret8",
+        }
+        for k, v in secrets.items():
+            tmp_config.set(k, v)
+
+        masked = tmp_config.to_dict()
+        for k in secrets:
+            assert masked[k] == "********"
 
     def test_save_creates_file_with_restricted_permissions(self, tmp_path):
         import stat
-        import sys
         config_file = tmp_path / "secure_config.yaml"
         config = Config(config_path=config_file)
         config.set("secret_key", "my-secret")
 
-        if sys.platform != "win32":
+        if os.name != 'nt':
             mode = config_file.stat().st_mode
             # File should be owner-only read/write (0o600)
-            assert not (mode & stat.S_IRGRP), "group read should not be set"
-            assert not (mode & stat.S_IROTH), "other read should not be set"
+            assert (stat.S_IMODE(mode) & 0o777) == 0o600
+
+    def test_save_enforces_permissions_on_existing_file(self, tmp_path):
+        import stat
+        if os.name == 'nt':
+            pytest.skip("Permission checks not applicable on Windows")
+
+        config_file = tmp_path / "existing_config.yaml"
+        # Create file with loose permissions
+        config_file.touch()
+        os.chmod(config_file, 0o644)
+        assert (stat.S_IMODE(config_file.stat().st_mode) & 0o777) == 0o644
+
+        config = Config(config_path=config_file)
+        config.set("key", "value") # This calls save()
+
+        assert (stat.S_IMODE(config_file.stat().st_mode) & 0o777) == 0o600
