@@ -73,11 +73,24 @@ class TestConfig:
         assert all(v is False for v in features.values())
 
     def test_to_dict_masks_sensitive(self, tmp_config):
+        # Test basic masking with fixed string
         tmp_config.set("exa_api_key", "super-secret-key-12345")
         tmp_config.set("normal_setting", "visible")
         masked = tmp_config.to_dict()
-        assert masked["exa_api_key"] == "super-se..."
+        assert masked["exa_api_key"] == "********"
         assert masked["normal_setting"] == "visible"
+
+        # Test new keywords
+        tmp_config.set("twitter_ct0", "some-ct0")
+        tmp_config.set("bilibili_sessdata", "some-sessdata")
+        tmp_config.set("bili_jct", "some-jct")
+        tmp_config.set("my_cookie", "some-cookie")
+
+        masked = tmp_config.to_dict()
+        assert masked["twitter_ct0"] == "********"
+        assert masked["bilibili_sessdata"] == "********"
+        assert masked["bili_jct"] == "********"
+        assert masked["my_cookie"] == "********"
 
     def test_save_creates_file_with_restricted_permissions(self, tmp_path):
         import stat
@@ -89,5 +102,21 @@ class TestConfig:
         if sys.platform != "win32":
             mode = config_file.stat().st_mode
             # File should be owner-only read/write (0o600)
-            assert not (mode & stat.S_IRGRP), "group read should not be set"
-            assert not (mode & stat.S_IROTH), "other read should not be set"
+            assert (mode & 0o777) == 0o600
+
+    def test_ensure_dir_restricted_permissions(self, tmp_path):
+        import stat
+        import sys
+        config_dir = tmp_path / "secure_dir"
+        config_file = config_dir / "config.yaml"
+
+        # Pre-create with loose permissions
+        config_dir.mkdir(parents=True)
+        os.chmod(config_dir, 0o755)
+
+        config = Config(config_path=config_file)
+        # _ensure_dir is called in __init__
+
+        if sys.platform != "win32":
+            mode = config_dir.stat().st_mode
+            assert (mode & 0o777) == 0o700
