@@ -27,6 +27,11 @@ class Config:
         "github_token": ["github_token"],
     }
 
+    SENSITIVE_KEYWORDS = (
+        "key", "token", "password", "proxy",
+        "ct0", "sessdata", "csrf", "secret", "cookie", "jct"
+    )
+
     def __init__(self, config_path: Optional[Path] = None):
         self.config_path = Path(config_path) if config_path else self.CONFIG_FILE
         self.config_dir = self.config_path.parent
@@ -36,7 +41,13 @@ class Config:
 
     def _ensure_dir(self):
         """Create config directory if it doesn't exist."""
-        self.config_dir.mkdir(parents=True, exist_ok=True)
+        self.config_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
+        # Ensure permissions on Unix even if it already existed
+        if os.name != "nt":
+            try:
+                os.chmod(self.config_dir, 0o700)
+            except OSError:
+                pass
 
     def load(self):
         """Load config from YAML file."""
@@ -65,6 +76,13 @@ class Config:
             # are not fully supported.
             with open(self.config_path, "w", encoding="utf-8") as f:
                 yaml.dump(self.data, f, default_flow_style=False, allow_unicode=True)
+
+        # Ensure permissions on Unix even if the file already existed
+        if os.name != "nt":
+            try:
+                os.chmod(self.config_path, 0o600)
+            except OSError:
+                pass
 
     def get(self, key: str, default: Any = None) -> Any:
         """Get a config value. Also checks environment variables (uppercase)."""
@@ -103,8 +121,8 @@ class Config:
         """Return config as dict (masks sensitive values)."""
         masked = {}
         for k, v in self.data.items():
-            if any(s in k.lower() for s in ("key", "token", "password", "proxy")):
-                masked[k] = f"{str(v)[:8]}..." if v else None
+            if any(s in k.lower() for s in self.SENSITIVE_KEYWORDS):
+                masked[k] = "********" if v else None
             else:
                 masked[k] = v
         return masked
