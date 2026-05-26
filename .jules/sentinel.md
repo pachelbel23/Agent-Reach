@@ -1,0 +1,4 @@
+## 2025-05-14 - [Permissions and Masking Hardening]
+**Vulnerability:** Sensitive configuration data (tokens, cookies) could be leaked via insecure file permissions (if the file already existed with broad permissions) or via incomplete masking in logs/UI (partial leakage of secrets or missing platform-specific identifiers like `ct0`).
+**Learning:** `os.open` with `O_CREAT` and a mode bitmask only sets permissions for *newly created* files. If the file already exists, it does not modify its permissions. An explicit `os.chmod` is required to ensure restrictive permissions on existing files. Additionally, partial masking (e.g., `prefix...`) still leaks information about the secret, such as its length or first characters; a fixed-length mask is more secure.
+**Prevention:** Always use explicit `os.chmod` after file operations that involve sensitive data, and use a fixed string for masking in `to_dict` or logging methods.
