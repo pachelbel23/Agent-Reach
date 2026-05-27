@@ -74,18 +74,26 @@ def format_report(results: Dict[str, dict]) -> str:
     if ok_count < total:
         lines.append("运行 `agent-reach setup` 解锁更多渠道")
 
-    # Security check: config file permissions (Unix only)
+    # Security check: config permissions (Unix only)
     import os
     import stat
-    import sys
-    config_path = Config.CONFIG_DIR / "config.yaml"
-    if config_path.exists() and sys.platform != "win32":
+    config_dir = Config.CONFIG_DIR
+    config_path = Config.CONFIG_FILE
+    if os.name != "nt":
         try:
-            mode = config_path.stat().st_mode
-            if mode & (stat.S_IRGRP | stat.S_IROTH):
-                lines.append("")
-                lines.append("[!]  安全提示：config.yaml 权限过宽（其他用户可读）")
-                lines.append("   修复：chmod 600 ~/.agent-reach/config.yaml")
+            if config_dir.exists():
+                dir_mode = config_dir.stat().st_mode
+                if dir_mode & (stat.S_IRGRP | stat.S_IXGRP | stat.S_IROTH | stat.S_IXOTH):
+                    lines.append("")
+                    lines.append("[!]  安全提示：配置目录权限过宽")
+                    lines.append(f"   修复：chmod 700 {config_dir}")
+
+            if config_path.exists():
+                file_mode = config_path.stat().st_mode
+                if file_mode & (stat.S_IRGRP | stat.S_IROTH):
+                    lines.append("")
+                    lines.append("[!]  安全提示：config.yaml 权限过宽")
+                    lines.append(f"   修复：chmod 600 {config_path}")
         except OSError:
             pass
 
