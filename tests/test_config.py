@@ -76,8 +76,25 @@ class TestConfig:
         tmp_config.set("exa_api_key", "super-secret-key-12345")
         tmp_config.set("normal_setting", "visible")
         masked = tmp_config.to_dict()
-        assert masked["exa_api_key"] == "super-se..."
+        assert masked["exa_api_key"] == "********"
         assert masked["normal_setting"] == "visible"
+
+    def test_to_dict_masks_platform_specific_secrets(self, tmp_config):
+        secrets = {
+            "twitter_auth_token": "secret1",
+            "twitter_ct0": "secret2",
+            "xhs_cookie": "secret3",
+            "bilibili_sessdata": "secret4",
+            "bilibili_csrf": "secret5",
+            "bili_jct": "secret6",
+            "github_token": "secret7",
+        }
+        for k, v in secrets.items():
+            tmp_config.set(k, v)
+
+        masked = tmp_config.to_dict()
+        for k in secrets:
+            assert masked[k] == "********", f"Key {k} was not masked"
 
     def test_save_creates_file_with_restricted_permissions(self, tmp_path):
         import stat
@@ -89,5 +106,17 @@ class TestConfig:
         if sys.platform != "win32":
             mode = config_file.stat().st_mode
             # File should be owner-only read/write (0o600)
-            assert not (mode & stat.S_IRGRP), "group read should not be set"
-            assert not (mode & stat.S_IROTH), "other read should not be set"
+            assert (mode & 0o777) == 0o600, f"Expected 0o600, got {oct(mode & 0o777)}"
+
+    def test_ensure_dir_restricts_permissions(self, tmp_path):
+        import sys
+        if sys.platform == "win32":
+            pytest.skip("Permission checks only on Unix")
+
+        config_dir = tmp_path / "restricted_dir"
+        config_file = config_dir / "config.yaml"
+        Config(config_path=config_file)
+
+        assert config_dir.exists()
+        mode = config_dir.stat().st_mode
+        assert (mode & 0o777) == 0o700, f"Expected 0o700, got {oct(mode & 0o777)}"
