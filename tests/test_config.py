@@ -76,8 +76,34 @@ class TestConfig:
         tmp_config.set("exa_api_key", "super-secret-key-12345")
         tmp_config.set("normal_setting", "visible")
         masked = tmp_config.to_dict()
-        assert masked["exa_api_key"] == "super-se..."
+        assert masked["exa_api_key"] == "********"
         assert masked["normal_setting"] == "visible"
+
+    def test_to_dict_masks_platform_specific_secrets(self, tmp_config):
+        tmp_config.set("twitter_ct0", "sensitive_ct0")
+        tmp_config.set("bilibili_sessdata", "sensitive_sessdata")
+        tmp_config.set("bili_jct", "sensitive_jct")
+        tmp_config.set("xhs_cookie", "sensitive_xhs_cookie")
+        masked = tmp_config.to_dict()
+        assert masked["twitter_ct0"] == "********"
+        assert masked["bilibili_sessdata"] == "********"
+        assert masked["bili_jct"] == "********"
+        assert masked["xhs_cookie"] == "********"
+
+    def test_save_fixes_loose_permissions(self, tmp_path):
+        import stat
+        import sys
+        if sys.platform == "win32":
+            pytest.skip("Permission tests for Unix only")
+
+        config_file = tmp_path / "loose_config.yaml"
+        config_file.write_text("key: value")
+        os.chmod(config_file, 0o644)
+        assert (config_file.stat().st_mode & 0o777) == 0o644
+
+        config = Config(config_path=config_file)
+        config.save()
+        assert (config_file.stat().st_mode & 0o777) == 0o600
 
     def test_save_creates_file_with_restricted_permissions(self, tmp_path):
         import stat
