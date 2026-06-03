@@ -76,8 +76,17 @@ class TestConfig:
         tmp_config.set("exa_api_key", "super-secret-key-12345")
         tmp_config.set("normal_setting", "visible")
         masked = tmp_config.to_dict()
-        assert masked["exa_api_key"] == "super-se..."
+        assert masked["exa_api_key"] == "********"
         assert masked["normal_setting"] == "visible"
+
+    def test_to_dict_masks_platform_specific_secrets(self, tmp_config):
+        tmp_config.set("twitter_ct0", "secret_ct0")
+        tmp_config.set("bilibili_sessdata", "secret_sessdata")
+        tmp_config.set("bili_jct", "secret_jct")
+        masked = tmp_config.to_dict()
+        assert masked["twitter_ct0"] == "********"
+        assert masked["bilibili_sessdata"] == "********"
+        assert masked["bili_jct"] == "********"
 
     def test_save_creates_file_with_restricted_permissions(self, tmp_path):
         import stat
@@ -91,3 +100,24 @@ class TestConfig:
             # File should be owner-only read/write (0o600)
             assert not (mode & stat.S_IRGRP), "group read should not be set"
             assert not (mode & stat.S_IROTH), "other read should not be set"
+
+    def test_save_corrects_broad_permissions(self, tmp_path):
+        import stat
+        import sys
+        if sys.platform == "win32":
+            pytest.skip("Permission correction test not applicable on Windows")
+
+        config_file = tmp_path / "correction_config.yaml"
+        # Create file with broad permissions
+        with open(config_file, "w") as f:
+            f.write("initial content")
+        os.chmod(config_file, 0o644)
+        assert (config_file.stat().st_mode & 0o777) == 0o644
+
+        config = Config(config_path=config_file)
+        config.set("secret_key", "my-secret")
+
+        mode = config_file.stat().st_mode
+        assert (mode & 0o777) == 0o600
+        assert not (mode & stat.S_IRGRP)
+        assert not (mode & stat.S_IROTH)
