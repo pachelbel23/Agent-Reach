@@ -74,10 +74,27 @@ class TestConfig:
 
     def test_to_dict_masks_sensitive(self, tmp_config):
         tmp_config.set("exa_api_key", "super-secret-key-12345")
-        tmp_config.set("normal_setting", "visible")
+        tmp_config.set("normal_setting", "visible_config")
         masked = tmp_config.to_dict()
-        assert masked["exa_api_key"] == "super-se..."
-        assert masked["normal_setting"] == "visible"
+        assert masked["exa_api_key"] == "********"
+        assert masked["normal_setting"] == "visible_config"
+
+    def test_to_dict_masks_platform_specific_secrets(self, tmp_config):
+        secrets = {
+            "twitter_ct0": "ct0_val",
+            "bilibili_sessdata": "sess_val",
+            "bilibili_csrf": "csrf_val",
+            "xhs_cookie": "cookie_val",
+            "my_secret_token": "token_val",
+            "bili_jct": "jct_val",
+            "db_password": "pass",
+        }
+        for k, v in secrets.items():
+            tmp_config.set(k, v)
+
+        masked = tmp_config.to_dict()
+        for k in secrets:
+            assert masked[k] == "********"
 
     def test_save_creates_file_with_restricted_permissions(self, tmp_path):
         import stat
@@ -86,8 +103,19 @@ class TestConfig:
         config = Config(config_path=config_file)
         config.set("secret_key", "my-secret")
 
-        if sys.platform != "win32":
+        if os.name != "nt":
             mode = config_file.stat().st_mode
             # File should be owner-only read/write (0o600)
-            assert not (mode & stat.S_IRGRP), "group read should not be set"
-            assert not (mode & stat.S_IROTH), "other read should not be set"
+            assert (mode & 0o777) == 0o600
+
+    def test_secure_directory_permissions(self, tmp_path):
+        import stat
+        import os
+        subdir = tmp_path / "secure_dir"
+        config_file = subdir / "config.yaml"
+        Config(config_path=config_file)
+
+        if os.name != "nt":
+            mode = subdir.stat().st_mode
+            # Directory should be owner-only rwx (0o700)
+            assert (mode & 0o777) == 0o700
