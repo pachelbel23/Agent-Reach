@@ -79,6 +79,21 @@ class TestConfig:
         assert masked["exa_api_key"] == "super-se..."
         assert masked["normal_setting"] == "visible"
 
+    def test_to_dict_masks_platform_specific_secrets(self, tmp_config):
+        secrets = {
+            "twitter_auth_token": "secret_token_123",
+            "twitter_ct0": "secret_ct0_456",
+            "bilibili_sessdata": "secret_sessdata_789",
+            "bilibili_csrf": "secret_jct_000",
+            "xhs_cookie": "some_cookie_data",
+        }
+        for k, v in secrets.items():
+            tmp_config.set(k, v)
+
+        masked = tmp_config.to_dict()
+        for k in secrets:
+            assert "..." in str(masked[k])
+
     def test_save_creates_file_with_restricted_permissions(self, tmp_path):
         import stat
         import sys
@@ -86,8 +101,18 @@ class TestConfig:
         config = Config(config_path=config_file)
         config.set("secret_key", "my-secret")
 
-        if sys.platform != "win32":
+        if os.name != "nt":
             mode = config_file.stat().st_mode
             # File should be owner-only read/write (0o600)
-            assert not (mode & stat.S_IRGRP), "group read should not be set"
-            assert not (mode & stat.S_IROTH), "other read should not be set"
+            assert (mode & 0o777) == 0o600
+
+    def test_ensure_dir_sets_restricted_permissions(self, tmp_path):
+        import stat
+        config_dir = tmp_path / "secure_dir"
+        config_file = config_dir / "config.yaml"
+        config = Config(config_path=config_file)
+
+        if os.name != "nt":
+            mode = config_dir.stat().st_mode
+            # Directory should be owner-only rwx (0o700)
+            assert (mode & 0o777) == 0o700
