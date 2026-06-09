@@ -76,18 +76,49 @@ class TestConfig:
         tmp_config.set("exa_api_key", "super-secret-key-12345")
         tmp_config.set("normal_setting", "visible")
         masked = tmp_config.to_dict()
-        assert masked["exa_api_key"] == "super-se..."
+        assert masked["exa_api_key"] == "********"
         assert masked["normal_setting"] == "visible"
+
+    def test_to_dict_masks_platform_specific_secrets(self, tmp_config):
+        tmp_config.set("twitter_ct0", "some-ct0-token")
+        tmp_config.set("bilibili_sessdata", "some-sessdata")
+        tmp_config.set("xhs_cookie", "some-cookies")
+        masked = tmp_config.to_dict()
+        assert masked["twitter_ct0"] == "********"
+        assert masked["bilibili_sessdata"] == "********"
+        assert masked["xhs_cookie"] == "********"
 
     def test_save_creates_file_with_restricted_permissions(self, tmp_path):
         import stat
         import sys
         config_file = tmp_path / "secure_config.yaml"
+        # Pre-create with loose permissions
+        config_file.parent.mkdir(parents=True, exist_ok=True)
+        config_file.touch()
+        if sys.platform != "win32":
+            os.chmod(config_file, 0o644)
+
         config = Config(config_path=config_file)
         config.set("secret_key", "my-secret")
 
         if sys.platform != "win32":
             mode = config_file.stat().st_mode
             # File should be owner-only read/write (0o600)
-            assert not (mode & stat.S_IRGRP), "group read should not be set"
-            assert not (mode & stat.S_IROTH), "other read should not be set"
+            assert stat.S_IMODE(mode) == 0o600
+
+    def test_ensure_dir_restricted_permissions(self, tmp_path):
+        import stat
+        import sys
+        config_dir = tmp_path / "secure_dir"
+        config_file = config_dir / "config.yaml"
+
+        # Pre-create with loose permissions
+        config_dir.mkdir(parents=True, exist_ok=True)
+        if sys.platform != "win32":
+            os.chmod(config_dir, 0o755)
+
+        config = Config(config_path=config_file)
+
+        if sys.platform != "win32":
+            mode = config_dir.stat().st_mode
+            assert stat.S_IMODE(mode) == 0o700
