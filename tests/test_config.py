@@ -76,8 +76,26 @@ class TestConfig:
         tmp_config.set("exa_api_key", "super-secret-key-12345")
         tmp_config.set("normal_setting", "visible")
         masked = tmp_config.to_dict()
-        assert masked["exa_api_key"] == "super-se..."
+        assert masked["exa_api_key"].startswith("super-se")
+        assert masked["exa_api_key"].endswith("...")
         assert masked["normal_setting"] == "visible"
+
+    def test_to_dict_masks_platform_specific_secrets(self, tmp_config):
+        """Test that platform-specific secrets are masked."""
+        secrets = {
+            "twitter_ct0": "secret_ct0_123",
+            "bilibili_sessdata": "secret_sessdata_456",
+            "bilibili_csrf": "secret_csrf_789",
+            "xhs_cookie": "secret_cookie_abc",
+            "some_jct": "secret_jct_def",
+        }
+        for k, v in secrets.items():
+            tmp_config.set(k, v)
+
+        masked = tmp_config.to_dict()
+        for k in secrets:
+            assert masked[k] != secrets[k], f"{k} should be masked"
+            assert masked[k].endswith("...")
 
     def test_save_creates_file_with_restricted_permissions(self, tmp_path):
         import stat

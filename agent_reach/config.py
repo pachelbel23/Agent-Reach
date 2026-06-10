@@ -27,6 +27,12 @@ class Config:
         "github_token": ["github_token"],
     }
 
+    # Keywords that trigger masking in to_dict()
+    SENSITIVE_KEYWORDS = (
+        "key", "token", "password", "proxy",
+        "ct0", "sessdata", "csrf", "secret", "cookie", "jct"
+    )
+
     def __init__(self, config_path: Optional[Path] = None):
         self.config_path = Path(config_path) if config_path else self.CONFIG_FILE
         self.config_dir = self.config_path.parent
@@ -103,7 +109,7 @@ class Config:
         """Return config as dict (masks sensitive values)."""
         masked = {}
         for k, v in self.data.items():
-            if any(s in k.lower() for s in ("key", "token", "password", "proxy")):
+            if any(s in k.lower() for s in self.SENSITIVE_KEYWORDS):
                 masked[k] = f"{str(v)[:8]}..." if v else None
             else:
                 masked[k] = v
