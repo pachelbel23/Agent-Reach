@@ -91,3 +91,40 @@ class TestConfig:
             # File should be owner-only read/write (0o600)
             assert not (mode & stat.S_IRGRP), "group read should not be set"
             assert not (mode & stat.S_IROTH), "other read should not be set"
+
+    def test_to_dict_masks_platform_specific_secrets(self, tmp_config):
+        # Twitter/X
+        tmp_config.set("twitter_ct0", "ct0_secret_val_long")
+        # Bilibili
+        tmp_config.set("bilibili_sessdata", "sessdata_val_long")
+        tmp_config.set("bilibili_csrf", "jct_val_long")
+        # General
+        tmp_config.set("my_jct", "another_jct_val_long")
+        tmp_config.set("my_cookie", "some_cookie_content_long")
+        tmp_config.set("admin_password", "very_secure_long")
+
+        masked = tmp_config.to_dict()
+        assert masked["twitter_ct0"] == "ct0_secr..."
+        assert masked["bilibili_sessdata"] == "sessdata..."
+        assert masked["bilibili_csrf"] == "jct_val_..."
+        assert masked["my_jct"] == "another_..."
+        assert masked["my_cookie"] == "some_coo..."
+        assert masked["admin_password"] == "very_sec..."
+
+    def test_ensure_dir_sets_restricted_permissions(self, tmp_path):
+        import stat
+        import sys
+        config_dir = tmp_path / "secure_dir"
+        config_file = config_dir / "config.yaml"
+        # Config constructor calls _ensure_dir
+        _ = Config(config_path=config_file)
+
+        if sys.platform != "win32":
+            mode = config_dir.stat().st_mode
+            # Directory should be owner-only rwx (0o700)
+            assert not (mode & stat.S_IRGRP), "group read should not be set"
+            assert not (mode & stat.S_IWGRP), "group write should not be set"
+            assert not (mode & stat.S_IXGRP), "group execute should not be set"
+            assert not (mode & stat.S_IROTH), "other read should not be set"
+            assert not (mode & stat.S_IWOTH), "other write should not be set"
+            assert not (mode & stat.S_IXOTH), "other execute should not be set"

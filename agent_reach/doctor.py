@@ -78,15 +78,29 @@ def format_report(results: Dict[str, dict]) -> str:
     import os
     import stat
     import sys
-    config_path = Config.CONFIG_DIR / "config.yaml"
-    if config_path.exists() and sys.platform != "win32":
-        try:
-            mode = config_path.stat().st_mode
-            if mode & (stat.S_IRGRP | stat.S_IROTH):
-                lines.append("")
-                lines.append("[!]  安全提示：config.yaml 权限过宽（其他用户可读）")
-                lines.append("   修复：chmod 600 ~/.agent-reach/config.yaml")
-        except OSError:
-            pass
+    config_dir = Config.CONFIG_DIR
+    config_path = Config.CONFIG_FILE
+    if sys.platform != "win32":
+        # Check directory permissions
+        if config_dir.exists():
+            try:
+                d_mode = config_dir.stat().st_mode
+                if d_mode & (stat.S_IRWXG | stat.S_IRWXO):
+                    lines.append("")
+                    lines.append("[!]  安全提示：配置目录权限过宽（其他用户可访问）")
+                    lines.append(f"   修复：chmod 700 {config_dir}")
+            except OSError:
+                pass
+
+        # Check file permissions
+        if config_path.exists():
+            try:
+                f_mode = config_path.stat().st_mode
+                if f_mode & (stat.S_IRGRP | stat.S_IROTH | stat.S_IWGRP | stat.S_IWOTH):
+                    lines.append("")
+                    lines.append("[!]  安全提示：config.yaml 权限过宽（其他用户可读写）")
+                    lines.append(f"   修复：chmod 600 {config_path}")
+            except OSError:
+                pass
 
     return "\n".join(lines)

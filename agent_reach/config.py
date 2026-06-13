@@ -18,6 +18,12 @@ class Config:
     CONFIG_DIR = Path.home() / ".agent-reach"
     CONFIG_FILE = CONFIG_DIR / "config.yaml"
 
+    # Keywords that trigger masking in to_dict()
+    SENSITIVE_KEYWORDS = (
+        "key", "token", "password", "proxy",
+        "ct0", "sessdata", "csrf", "secret", "cookie", "jct"
+    )
+
     # Feature → required config keys
     FEATURE_REQUIREMENTS = {
         "exa_search": ["exa_api_key"],
@@ -35,8 +41,16 @@ class Config:
         self.load()
 
     def _ensure_dir(self):
-        """Create config directory if it doesn't exist."""
-        self.config_dir.mkdir(parents=True, exist_ok=True)
+        """Create config directory if it doesn't exist and restrict permissions."""
+        if not self.config_dir.exists():
+            self.config_dir.mkdir(parents=True, exist_ok=True)
+
+        # Restrict directory permissions (Unix only)
+        if os.name != "nt":
+            try:
+                os.chmod(self.config_dir, 0o700)
+            except OSError:
+                pass
 
     def load(self):
         """Load config from YAML file."""
@@ -47,7 +61,7 @@ class Config:
             self.data = {}
 
     def save(self):
-        """Save config to YAML file."""
+        """Save config to YAML file with restricted permissions."""
         self._ensure_dir()
         # Create file with restricted permissions from the start to avoid
         # a race window where credentials are briefly world-readable.
@@ -60,6 +74,10 @@ class Config:
             )
             with os.fdopen(fd, "w", encoding="utf-8") as f:
                 yaml.dump(self.data, f, default_flow_style=False, allow_unicode=True)
+
+            # Explicitly set permissions in case file already existed
+            if os.name != "nt":
+                os.chmod(self.config_path, 0o600)
         except OSError:
             # Fallback for Windows or other edge cases where os.open flags
             # are not fully supported.
@@ -103,7 +121,7 @@ class Config:
         """Return config as dict (masks sensitive values)."""
         masked = {}
         for k, v in self.data.items():
-            if any(s in k.lower() for s in ("key", "token", "password", "proxy")):
+            if any(s in k.lower() for s in self.SENSITIVE_KEYWORDS):
                 masked[k] = f"{str(v)[:8]}..." if v else None
             else:
                 masked[k] = v
