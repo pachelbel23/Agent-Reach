@@ -76,8 +76,35 @@ class TestConfig:
         tmp_config.set("exa_api_key", "super-secret-key-12345")
         tmp_config.set("normal_setting", "visible")
         masked = tmp_config.to_dict()
-        assert masked["exa_api_key"] == "super-se..."
+        # 22 chars / 3 = 7. "super-s..." is 7 chars.
+        assert masked["exa_api_key"] == "super-s..."
         assert masked["normal_setting"] == "visible"
+
+    def test_to_dict_masks_platform_specific_secrets(self, tmp_config):
+        """Ensure platform-specific secrets are also masked."""
+        tmp_config.set("twitter_ct0", "secret_ct0_value")
+        tmp_config.set("bilibili_sessdata", "secret_sessdata_value")
+        tmp_config.set("bilibili_csrf", "secret_jct_value")
+        tmp_config.set("xhs_cookie", "secret_xhs_cookie_value")
+
+        masked = tmp_config.to_dict()
+        # "secret_ct0_value" is 16 chars. 16/3 = 5.
+        assert masked["twitter_ct0"] == "secre..."
+        # "secret_sessdata_value" is 21 chars. 21/3 = 7.
+        assert masked["bilibili_sessdata"] == "secret_..."
+        # "secret_jct_value" is 16 chars. 16/3 = 5.
+        assert masked["bilibili_csrf"] == "secre..."
+        # "secret_xhs_cookie_value" is 23 chars. 23/3 = 7.
+        assert masked["xhs_cookie"] == "secret_..."
+
+    def test_to_dict_masks_short_secrets(self, tmp_config):
+        """Ensure short secrets are masked securely."""
+        tmp_config.set("short_key", "123456")  # 6 chars / 3 = 2
+        tmp_config.set("tiny_key", "12")      # 2 chars / 3 = 0
+
+        masked = tmp_config.to_dict()
+        assert masked["short_key"] == "12..."
+        assert masked["tiny_key"] == "..."
 
     def test_save_creates_file_with_restricted_permissions(self, tmp_path):
         import stat

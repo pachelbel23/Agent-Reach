@@ -18,6 +18,20 @@ class Config:
     CONFIG_DIR = Path.home() / ".agent-reach"
     CONFIG_FILE = CONFIG_DIR / "config.yaml"
 
+    # Keywords that indicate sensitive data in config keys
+    SENSITIVE_KEYWORDS = (
+        "key",
+        "token",
+        "password",
+        "proxy",
+        "ct0",
+        "sessdata",
+        "csrf",
+        "secret",
+        "cookie",
+        "jct",
+    )
+
     # Feature → required config keys
     FEATURE_REQUIREMENTS = {
         "exa_search": ["exa_api_key"],
@@ -35,8 +49,13 @@ class Config:
         self.load()
 
     def _ensure_dir(self):
-        """Create config directory if it doesn't exist."""
+        """Create config directory if it doesn't exist and ensure permissions."""
         self.config_dir.mkdir(parents=True, exist_ok=True)
+        if os.name != "nt":
+            try:
+                os.chmod(self.config_dir, 0o700)
+            except OSError:
+                pass
 
     def load(self):
         """Load config from YAML file."""
@@ -65,6 +84,14 @@ class Config:
             # are not fully supported.
             with open(self.config_path, "w", encoding="utf-8") as f:
                 yaml.dump(self.data, f, default_flow_style=False, allow_unicode=True)
+
+        # Ensure restricted permissions (0o600) on the file after saving,
+        # in case it was created with looser permissions previously.
+        if os.name != "nt":
+            try:
+                os.chmod(self.config_path, 0o600)
+            except OSError:
+                pass
 
     def get(self, key: str, default: Any = None) -> Any:
         """Get a config value. Also checks environment variables (uppercase)."""
@@ -103,8 +130,18 @@ class Config:
         """Return config as dict (masks sensitive values)."""
         masked = {}
         for k, v in self.data.items():
-            if any(s in k.lower() for s in ("key", "token", "password", "proxy")):
-                masked[k] = f"{str(v)[:8]}..." if v else None
+            if any(s in k.lower() for s in self.SENSITIVE_KEYWORDS):
+                if not v:
+                    masked[k] = None
+                    continue
+                # For secrets, show at most 1/3 of the string or 8 chars, whichever is smaller.
+                s_val = str(v)
+                visible_len = min(8, len(s_val) // 3)
+                if visible_len < 1 and len(s_val) > 0:
+                    # Always hide everything for extremely short secrets
+                    masked[k] = "..."
+                else:
+                    masked[k] = f"{s_val[:visible_len]}..."
             else:
                 masked[k] = v
         return masked
