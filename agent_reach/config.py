@@ -27,6 +27,10 @@ class Config:
         "github_token": ["github_token"],
     }
 
+    SENSITIVE_KEYWORDS = (
+        "key", "token", "password", "proxy", "ct0", "sessdata", "csrf", "jct", "cookie", "secret"
+    )
+
     def __init__(self, config_path: Optional[Path] = None):
         self.config_path = Path(config_path) if config_path else self.CONFIG_FILE
         self.config_dir = self.config_path.parent
@@ -35,8 +39,14 @@ class Config:
         self.load()
 
     def _ensure_dir(self):
-        """Create config directory if it doesn't exist."""
-        self.config_dir.mkdir(parents=True, exist_ok=True)
+        """Create config directory if it doesn't exist and set permissions."""
+        if not self.config_dir.exists():
+            self.config_dir.mkdir(parents=True, exist_ok=True)
+            if os.name != "nt":
+                os.chmod(self.config_dir, 0o700)
+        else:
+            if os.name != "nt":
+                os.chmod(self.config_dir, 0o700)
 
     def load(self):
         """Load config from YAML file."""
@@ -60,6 +70,8 @@ class Config:
             )
             with os.fdopen(fd, "w", encoding="utf-8") as f:
                 yaml.dump(self.data, f, default_flow_style=False, allow_unicode=True)
+            if os.name != "nt":
+                os.chmod(self.config_path, 0o600)
         except OSError:
             # Fallback for Windows or other edge cases where os.open flags
             # are not fully supported.
@@ -103,8 +115,20 @@ class Config:
         """Return config as dict (masks sensitive values)."""
         masked = {}
         for k, v in self.data.items():
-            if any(s in k.lower() for s in ("key", "token", "password", "proxy")):
-                masked[k] = f"{str(v)[:8]}..." if v else None
+            is_sensitive = any(s in k.lower() for s in self.SENSITIVE_KEYWORDS)
+            if is_sensitive:
+                if not v:
+                    masked[k] = None
+                    continue
+                s_v = str(v)
+                if len(s_v) < 3:
+                    masked[k] = "..."
+                else:
+                    # Mask more aggressively for shorter strings, but at most 8 chars
+                    limit = min(8, len(s_v) // 3)
+                    if limit == 0 and len(s_v) >= 3:
+                        limit = 1
+                    masked[k] = f"{s_v[:limit]}..."
             else:
                 masked[k] = v
         return masked
