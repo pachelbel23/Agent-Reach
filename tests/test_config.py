@@ -75,9 +75,24 @@ class TestConfig:
     def test_to_dict_masks_sensitive(self, tmp_config):
         tmp_config.set("exa_api_key", "super-secret-key-12345")
         tmp_config.set("normal_setting", "visible")
+        tmp_config.set("twitter_ct0", "abcdef1234567890")
+        tmp_config.set("bilibili_sessdata", "short")
+        tmp_config.set("very_short", "hi")
+        tmp_config.set("empty_token", "")
+
         masked = tmp_config.to_dict()
-        assert masked["exa_api_key"] == "super-se..."
+        # "super-secret-key-12345" length 23, 23//3 = 7
+        assert masked["exa_api_key"] == "super-s..."
         assert masked["normal_setting"] == "visible"
+        # "abcdef1234567890" length 16, 16//3 = 5
+        assert masked["twitter_ct0"] == "abcde..."
+        # "short" length 5, 5//3 = 1
+        assert masked["bilibili_sessdata"] == "s..."
+        # "hi" length 2, < 3
+        tmp_config.set("short_secret", "hi")
+        masked = tmp_config.to_dict()
+        assert masked["short_secret"] == "..."
+        assert masked["empty_token"] is None
 
     def test_save_creates_file_with_restricted_permissions(self, tmp_path):
         import stat
@@ -89,5 +104,36 @@ class TestConfig:
         if sys.platform != "win32":
             mode = config_file.stat().st_mode
             # File should be owner-only read/write (0o600)
-            assert not (mode & stat.S_IRGRP), "group read should not be set"
-            assert not (mode & stat.S_IROTH), "other read should not be set"
+            assert (mode & 0o777) == 0o600
+
+    def test_save_corrects_existing_permissions(self, tmp_path):
+        import stat
+        import sys
+        if sys.platform == "win32":
+            pytest.skip("Permission tests for Unix only")
+
+        config_file = tmp_path / "loose_config.yaml"
+        # Create with loose permissions
+        with open(config_file, "w") as f:
+            f.write("{}")
+        os.chmod(config_file, 0o644)
+        assert (config_file.stat().st_mode & 0o777) == 0o644
+
+        config = Config(config_path=config_file)
+        config.set("test_key", "test_value")
+
+        assert (config_file.stat().st_mode & 0o777) == 0o600
+
+    def test_dir_permissions(self, tmp_path):
+        import sys
+        if sys.platform == "win32":
+            pytest.skip("Permission tests for Unix only")
+
+        config_dir = tmp_path / "secure_dir"
+        config_file = config_dir / "config.yaml"
+
+        # Manually create dir with loose perms if it exists?
+        # Actually _ensure_dir is called in __init__.
+        config = Config(config_path=config_file)
+
+        assert (config_dir.stat().st_mode & 0o777) == 0o700

@@ -1,0 +1,4 @@
+## 2025-05-14 - Configuration Permission Hardening and Masking Improvement
+**Vulnerability:** Configuration files and directories were created with potentially loose permissions (default umask), allowing other users on a shared system to read sensitive session cookies and API keys. Additionally, `to_dict()` masking was insufficient, potentially leaking parts of short secrets and missing platform-specific identifiers like `ct0`.
+**Learning:** `os.open` with `O_CREAT` and a mode bitmask only sets permissions for *newly* created files. If a file already exists with broader permissions, it remains accessible. Explicit `os.chmod` is required to ensure restrictive permissions on every save.
+**Prevention:** Always use `os.chmod` to strictly enforce `0o700` for sensitive directories and `0o600` for sensitive files on Unix-like systems, even if they already exist. Expand masking keywords to include all platform-specific secrets.
