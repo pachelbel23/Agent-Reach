@@ -37,6 +37,12 @@ class Config:
     def _ensure_dir(self):
         """Create config directory if it doesn't exist."""
         self.config_dir.mkdir(parents=True, exist_ok=True)
+        # Ensure directory is restricted (Unix only)
+        if os.name != "nt":
+            try:
+                os.chmod(self.config_dir, 0o700)
+            except OSError:
+                pass
 
     def load(self):
         """Load config from YAML file."""
@@ -53,6 +59,7 @@ class Config:
         # a race window where credentials are briefly world-readable.
         try:
             import stat
+
             fd = os.open(
                 str(self.config_path),
                 os.O_WRONLY | os.O_CREAT | os.O_TRUNC,
@@ -65,6 +72,13 @@ class Config:
             # are not fully supported.
             with open(self.config_path, "w", encoding="utf-8") as f:
                 yaml.dump(self.data, f, default_flow_style=False, allow_unicode=True)
+
+        # Strictly enforce permissions on every save (Unix only)
+        if os.name != "nt":
+            try:
+                os.chmod(self.config_path, 0o600)
+            except OSError:
+                pass
 
     def get(self, key: str, default: Any = None) -> Any:
         """Get a config value. Also checks environment variables (uppercase)."""
@@ -101,10 +115,23 @@ class Config:
 
     def to_dict(self) -> dict:
         """Return config as dict (masks sensitive values)."""
+        sensitive_keywords = (
+            "key", "token", "password", "proxy", "ct0", "sessdata", "csrf", "secret", "cookie", "jct"
+        )
         masked = {}
         for k, v in self.data.items():
-            if any(s in k.lower() for s in ("key", "token", "password", "proxy")):
-                masked[k] = f"{str(v)[:8]}..." if v else None
+            if any(s in k.lower() for s in sensitive_keywords):
+                if not v:
+                    masked[k] = None
+                    continue
+                # Mask: show at most 1/3 of the string or 8 chars (whichever is smaller)
+                val_str = str(v)
+                length = len(val_str)
+                if length < 3:
+                    masked[k] = "..."
+                else:
+                    visible_len = min(length // 3, 8)
+                    masked[k] = f"{val_str[:visible_len]}..."
             else:
                 masked[k] = v
         return masked
