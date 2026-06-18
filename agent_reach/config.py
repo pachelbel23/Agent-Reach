@@ -27,6 +27,11 @@ class Config:
         "github_token": ["github_token"],
     }
 
+    # Keywords that trigger masking in to_dict()
+    SENSITIVE_KEYWORDS = (
+        "key", "token", "password", "proxy", "ct0", "sessdata", "csrf", "secret", "cookie", "jct"
+    )
+
     def __init__(self, config_path: Optional[Path] = None):
         self.config_path = Path(config_path) if config_path else self.CONFIG_FILE
         self.config_dir = self.config_path.parent
@@ -35,8 +40,13 @@ class Config:
         self.load()
 
     def _ensure_dir(self):
-        """Create config directory if it doesn't exist."""
+        """Create config directory if it doesn't exist with restricted permissions."""
         self.config_dir.mkdir(parents=True, exist_ok=True)
+        if os.name != "nt":
+            try:
+                os.chmod(self.config_dir, 0o700)
+            except OSError:
+                pass
 
     def load(self):
         """Load config from YAML file."""
@@ -103,8 +113,19 @@ class Config:
         """Return config as dict (masks sensitive values)."""
         masked = {}
         for k, v in self.data.items():
-            if any(s in k.lower() for s in ("key", "token", "password", "proxy")):
-                masked[k] = f"{str(v)[:8]}..." if v else None
+            if any(s in k.lower() for s in self.SENSITIVE_KEYWORDS):
+                if not v:
+                    masked[k] = None
+                    continue
+                # Masking logic: show at most 1/3 of the string or 8 chars (whichever is smaller)
+                # For very short strings (<3), mask completely.
+                val_str = str(v)
+                length = len(val_str)
+                if length < 3:
+                    masked[k] = "..."
+                else:
+                    visible_len = min(8, length // 3)
+                    masked[k] = f"{val_str[:visible_len]}..."
             else:
                 masked[k] = v
         return masked
