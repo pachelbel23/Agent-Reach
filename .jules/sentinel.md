@@ -1,0 +1,4 @@
+## 2025-05-22 - [Sensitive Data Masking and Config Security]
+**Vulnerability:** Platform-specific session identifiers (e.g., `ct0`, `sessdata`, `jct`) were not being masked in the `Config.to_dict()` output, leading to potential data leakage in logs or doctor reports. Additionally, configuration directory permissions were not explicitly restricted to the user.
+**Learning:** Generic security masking keywords like 'key' or 'token' often fail to capture the variety in platform-specific session naming conventions. Also, `os.open` with `O_CREAT` and a mode doesn't change permissions of an existing file; an explicit `os.chmod` is needed to ensure restrictive permissions on overwrites.
+**Prevention:** Maintain an extensible list of sensitive identifiers and implement a more robust masking algorithm that balances visibility for debugging with security. Always explicitly set file and directory permissions (0o600/0o700) during initialization and save operations.
