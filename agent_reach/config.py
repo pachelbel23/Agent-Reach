@@ -27,6 +27,11 @@ class Config:
         "github_token": ["github_token"],
     }
 
+    # Keywords that indicate sensitive data in config keys
+    SENSITIVE_KEYWORDS = (
+        "key", "token", "password", "proxy", "ct0", "sessdata", "csrf", "cookie", "jct"
+    )
+
     def __init__(self, config_path: Optional[Path] = None):
         self.config_path = Path(config_path) if config_path else self.CONFIG_FILE
         self.config_dir = self.config_path.parent
@@ -36,7 +41,20 @@ class Config:
 
     def _ensure_dir(self):
         """Create config directory if it doesn't exist."""
-        self.config_dir.mkdir(parents=True, exist_ok=True)
+        if not self.config_dir.exists():
+            self.config_dir.mkdir(parents=True, exist_ok=True)
+            # Restrict permissions (0o700) on Unix
+            if os.name != "nt":
+                try:
+                    os.chmod(self.config_dir, 0o700)
+                except OSError:
+                    pass
+        elif os.name != "nt":
+            # Self-heal if permissions are too wide
+            try:
+                os.chmod(self.config_dir, 0o700)
+            except OSError:
+                pass
 
     def load(self):
         """Load config from YAML file."""
@@ -60,11 +78,20 @@ class Config:
             )
             with os.fdopen(fd, "w", encoding="utf-8") as f:
                 yaml.dump(self.data, f, default_flow_style=False, allow_unicode=True)
+
+            # Explicitly chmod to ensure 0o600 even if file already existed
+            if os.name != "nt":
+                os.chmod(self.config_path, 0o600)
         except OSError:
             # Fallback for Windows or other edge cases where os.open flags
             # are not fully supported.
             with open(self.config_path, "w", encoding="utf-8") as f:
                 yaml.dump(self.data, f, default_flow_style=False, allow_unicode=True)
+            if os.name != "nt":
+                try:
+                    os.chmod(self.config_path, 0o600)
+                except OSError:
+                    pass
 
     def get(self, key: str, default: Any = None) -> Any:
         """Get a config value. Also checks environment variables (uppercase)."""
@@ -103,8 +130,20 @@ class Config:
         """Return config as dict (masks sensitive values)."""
         masked = {}
         for k, v in self.data.items():
-            if any(s in k.lower() for s in ("key", "token", "password", "proxy")):
-                masked[k] = f"{str(v)[:8]}..." if v else None
+            if any(kw in k.lower() for kw in self.SENSITIVE_KEYWORDS):
+                if not v:
+                    masked[k] = None
+                    continue
+                s_val = str(v)
+                # Show at most 1/3 or 8 chars, whichever is smaller.
+                # Strings < 3 chars are fully masked.
+                if len(s_val) < 3:
+                    masked[k] = "..."
+                else:
+                    show_len = min(len(s_val) // 3, 8)
+                    if show_len == 0:
+                        show_len = 1
+                    masked[k] = f"{s_val[:show_len]}..."
             else:
                 masked[k] = v
         return masked

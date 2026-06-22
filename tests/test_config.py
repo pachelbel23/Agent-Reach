@@ -76,18 +76,40 @@ class TestConfig:
         tmp_config.set("exa_api_key", "super-secret-key-12345")
         tmp_config.set("normal_setting", "visible")
         masked = tmp_config.to_dict()
-        assert masked["exa_api_key"] == "super-se..."
+        assert masked["exa_api_key"] == "super-s..."
         assert masked["normal_setting"] == "visible"
+
+    def test_to_dict_masks_platform_specific_secrets(self, tmp_config):
+        tmp_config.set("twitter_ct0", "secret_ct0_value")
+        tmp_config.set("bilibili_sessdata", "secret_sessdata_value")
+        tmp_config.set("xhs_cookie", "secret_xhs_cookie_value")
+        tmp_config.set("bilibili_csrf", "secret_csrf_value")
+
+        masked = tmp_config.to_dict()
+        assert masked["twitter_ct0"] == "secre..."
+        assert masked["bilibili_sessdata"] == "secret_..."
+        assert masked["xhs_cookie"] == "secret_..."
+        assert masked["bilibili_csrf"] == "secre..."
 
     def test_save_creates_file_with_restricted_permissions(self, tmp_path):
         import stat
-        import sys
+        import os
         config_file = tmp_path / "secure_config.yaml"
         config = Config(config_path=config_file)
         config.set("secret_key", "my-secret")
 
-        if sys.platform != "win32":
+        if os.name != "nt":
             mode = config_file.stat().st_mode
             # File should be owner-only read/write (0o600)
-            assert not (mode & stat.S_IRGRP), "group read should not be set"
-            assert not (mode & stat.S_IROTH), "other read should not be set"
+            assert stat.S_IMODE(mode) == 0o600
+
+    def test_dir_permissions(self, tmp_path):
+        import stat
+        import os
+        config_dir = tmp_path / "secure_dir"
+        config_file = config_dir / "config.yaml"
+        Config(config_path=config_file)
+
+        if os.name != "nt":
+            mode = config_dir.stat().st_mode
+            assert stat.S_IMODE(mode) == 0o700
