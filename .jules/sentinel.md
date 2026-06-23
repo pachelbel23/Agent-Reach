@@ -1,0 +1,4 @@
+## 2025-05-22 - Incomplete Masking of Platform-Specific Session Identifiers
+**Vulnerability:** The `Config.to_dict()` method, used for safely displaying configuration, only masked generic keywords like 'key' and 'token'. It leaked critical platform-specific session identifiers such as Twitter's `ct0`, Bilibili's `sessdata` and `jct`, and XiaoHongShu's `cookie_string`.
+**Learning:** Generic security masking often fails to account for the diversity of session naming conventions across different platforms. In this codebase, the `cookie_extract.py` utility introduces many unique identifiers that aren't captured by standard "secret" or "key" filters.
+**Prevention:** Maintain an extensible list of sensitive identifiers in the `Config` class that reflects all credentials used by integration channels. Always verify masking logic when adding new platform integrations.
