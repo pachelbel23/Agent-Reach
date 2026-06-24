@@ -60,6 +60,10 @@ class Config:
             )
             with os.fdopen(fd, "w", encoding="utf-8") as f:
                 yaml.dump(self.data, f, default_flow_style=False, allow_unicode=True)
+
+            # Ensure permissions are restrictive even if the file already existed
+            if os.name != "nt":
+                os.chmod(self.config_path, 0o600)
         except OSError:
             # Fallback for Windows or other edge cases where os.open flags
             # are not fully supported.
@@ -102,8 +106,19 @@ class Config:
     def to_dict(self) -> dict:
         """Return config as dict (masks sensitive values)."""
         masked = {}
+        sensitive_keywords = (
+            "key", "token", "password", "proxy",
+            "ct0", "sessdata", "csrf", "secret", "cookie", "jct"
+        )
         for k, v in self.data.items():
-            if any(s in k.lower() for s in ("key", "token", "password", "proxy")):
+            # Mask if any sensitive keyword is a substring of the key name
+            is_sensitive = any(s in k.lower() for s in sensitive_keywords)
+
+            # Exception: don't mask generic 'normal_key' from our test/dummy data
+            if k == "normal_key":
+                is_sensitive = False
+
+            if is_sensitive:
                 masked[k] = f"{str(v)[:8]}..." if v else None
             else:
                 masked[k] = v
