@@ -1,0 +1,4 @@
+## 2025-05-22 - [Secure Configuration and Masking Refinements]
+**Vulnerability:** Configuration directory and file permissions were insufficiently restrictive (0o775 and 0o644), potentially exposing secrets to other users. Additionally, sensitive data masking in `to_dict()` used a simple slice that could leak short secrets in full.
+**Learning:** Hardening permissions by default is good, but applying `os.chmod(0o700)` to any parent directory specified by the user can break system-level functionality if the user points to a shared directory like `/tmp` or `~`. Masking logic must account for short strings to avoid providing the full secret followed by an ellipsis.
+**Prevention:** Only apply restrictive directory permissions to the application's default configuration path. Use more robust masking that hides short secrets entirely or partially.

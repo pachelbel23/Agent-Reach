@@ -37,6 +37,13 @@ class Config:
     def _ensure_dir(self):
         """Create config directory if it doesn't exist."""
         self.config_dir.mkdir(parents=True, exist_ok=True)
+        # Only enforce 0o700 on our default ~/.agent-reach directory
+        # to avoid disrupting permissions on shared folders like /tmp or ~.
+        if os.name != 'nt' and str(self.config_dir) == str(self.CONFIG_DIR):
+            try:
+                os.chmod(self.config_dir, 0o700)
+            except OSError:
+                pass
 
     def load(self):
         """Load config from YAML file."""
@@ -65,6 +72,14 @@ class Config:
             # are not fully supported.
             with open(self.config_path, "w", encoding="utf-8") as f:
                 yaml.dump(self.data, f, default_flow_style=False, allow_unicode=True)
+
+        # Explicitly set permissions to 0o600 after save to ensure it's
+        # restricted even if the file already existed with broader perms.
+        if os.name != 'nt' and self.config_path.exists():
+            try:
+                os.chmod(self.config_path, 0o600)
+            except OSError:
+                pass
 
     def get(self, key: str, default: Any = None) -> Any:
         """Get a config value. Also checks environment variables (uppercase)."""
@@ -102,9 +117,21 @@ class Config:
     def to_dict(self) -> dict:
         """Return config as dict (masks sensitive values)."""
         masked = {}
+        sensitive_keywords = (
+            "key", "token", "password", "proxy",
+            "ct0", "sessdata", "csrf", "cookie", "jct"
+        )
         for k, v in self.data.items():
-            if any(s in k.lower() for s in ("key", "token", "password", "proxy")):
-                masked[k] = f"{str(v)[:8]}..." if v else None
+            if any(s in k.lower() for s in sensitive_keywords):
+                # Mask by showing first 8 chars, but if the value is short,
+                # ensure it is at least partially hidden.
+                val_str = str(v)
+                if not val_str:
+                    masked[k] = None
+                elif len(val_str) <= 8:
+                    masked[k] = "****"
+                else:
+                    masked[k] = f"{val_str[:8]}..."
             else:
                 masked[k] = v
         return masked
