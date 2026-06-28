@@ -89,5 +89,54 @@ class TestConfig:
         if sys.platform != "win32":
             mode = config_file.stat().st_mode
             # File should be owner-only read/write (0o600)
-            assert not (mode & stat.S_IRGRP), "group read should not be set"
-            assert not (mode & stat.S_IROTH), "other read should not be set"
+            assert (mode & 0o777) == 0o600, f"Expected 0o600, got {oct(mode & 0o777)}"
+
+    def test_to_dict_masks_platform_specific_secrets(self, tmp_config):
+        tmp_config.set("twitter_ct0", "secret_ct0_value")
+        tmp_config.set("bilibili_sessdata", "secret_sessdata_value")
+        tmp_config.set("xhs_cookie", "secret_cookie_value")
+
+        masked = tmp_config.to_dict()
+        assert masked["twitter_ct0"] == "secret_c..."
+        assert masked["bilibili_sessdata"] == "secret_s..."
+        assert masked["xhs_cookie"] == "secret_c..."
+
+    def test_to_dict_masks_short_secrets(self, tmp_config):
+        tmp_config.set("short_key", "12345")
+        masked = tmp_config.to_dict()
+        assert masked["short_key"] == "****"
+
+    def test_config_directory_permissions(self, tmp_path, monkeypatch):
+        import stat
+        import sys
+        config_dir = tmp_path / "secure_dir"
+        config_file = config_dir / "config.yaml"
+
+        # Mock CONFIG_DIR to be our temp dir so chmod is applied
+        monkeypatch.setattr(Config, "CONFIG_DIR", config_dir)
+
+        # Initialize config which should create directory with restricted permissions
+        Config(config_path=config_file)
+
+        assert config_dir.exists()
+        if sys.platform != "win32":
+            mode = config_dir.stat().st_mode
+            # Directory should be owner-only read/write/execute (0o700)
+            assert (mode & 0o777) == 0o700, f"Expected 0o700, got {oct(mode & 0o777)}"
+
+    def test_config_directory_permissions_not_applied_to_other_dirs(self, tmp_path):
+        import sys
+        config_dir = tmp_path / "other_dir"
+        config_file = config_dir / "config.yaml"
+
+        # Create dir with loose perms
+        config_dir.mkdir(parents=True, exist_ok=True)
+        if sys.platform != "win32":
+            os.chmod(config_dir, 0o775)
+
+        Config(config_path=config_file)
+
+        if sys.platform != "win32":
+            mode = config_dir.stat().st_mode
+            # Should NOT be 0o700 because it's not the default CONFIG_DIR
+            assert (mode & 0o777) == 0o775
