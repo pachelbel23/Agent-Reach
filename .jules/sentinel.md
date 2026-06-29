@@ -1,0 +1,4 @@
+## 2025-05-22 - [Incomplete masking of platform-specific identifiers and lax permission enforcement]
+**Vulnerability:** Platform-specific session identifiers (e.g., `ct0`, `sessdata`, `jct`) were not included in the sensitive data masking list, and configuration file permissions were not strictly enforced if the file already existed.
+**Learning:** `os.open` with `O_CREAT` and a mode bitmask only sets permissions for *newly created* files. If a file already exists with wider permissions, it remains accessible unless explicitly changed. Additionally, generic security keywords (like `key`, `token`) fail to capture platform-specific session naming conventions.
+**Prevention:** Always use explicit `os.chmod` after file operations that require strict permissions, and maintain an extensible list of sensitive identifiers for data sanitization.

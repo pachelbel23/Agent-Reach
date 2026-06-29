@@ -89,5 +89,42 @@ class TestConfig:
         if sys.platform != "win32":
             mode = config_file.stat().st_mode
             # File should be owner-only read/write (0o600)
-            assert not (mode & stat.S_IRGRP), "group read should not be set"
-            assert not (mode & stat.S_IROTH), "other read should not be set"
+            assert (mode & 0o777) == 0o600
+
+    def test_to_dict_masks_platform_specific_secrets(self, tmp_config):
+        tmp_config.set("twitter_ct0", "secret-ct0-value")
+        tmp_config.set("bilibili_sessdata", "secret-sessdata-value")
+        tmp_config.set("bili_jct", "secret-jct-value")
+        tmp_config.set("csrf_token", "secret-csrf-value")
+
+        masked = tmp_config.to_dict()
+        assert masked["twitter_ct0"] == "secret-c..."
+        assert masked["bilibili_sessdata"] == "secret-s..."
+        assert masked["bili_jct"] == "secret-j..."
+        assert masked["csrf_token"] == "secret-c..."
+
+    def test_to_dict_masks_short_secrets(self, tmp_config):
+        # Shorter than 8 chars
+        tmp_config.set("my_password", "12345")
+        masked = tmp_config.to_dict()
+        assert masked["my_password"] == "*****"
+
+    def test_save_enforces_permissions_on_existing_file(self, tmp_path):
+        import stat
+        import os
+        import sys
+        if sys.platform == "win32":
+            pytest.skip("Permission enforcement test only for Unix")
+
+        config_file = tmp_path / "existing_config.yaml"
+        # Create with wide permissions
+        with open(config_file, "w") as f:
+            f.write("old: data")
+        os.chmod(config_file, 0o644)
+        assert (config_file.stat().st_mode & 0o777) == 0o644
+
+        config = Config(config_path=config_file)
+        config.set("new_key", "new_value")
+
+        # Should now be 0o600
+        assert (config_file.stat().st_mode & 0o777) == 0o600
