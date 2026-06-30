@@ -79,6 +79,25 @@ class TestConfig:
         assert masked["exa_api_key"] == "super-se..."
         assert masked["normal_setting"] == "visible"
 
+    def test_to_dict_masks_platform_specific_secrets(self, tmp_config):
+        secrets = {
+            "twitter_ct0": "secret_ct0_value",
+            "bilibili_sessdata": "secret_sessdata_value",
+            "xhs_cookie": "secret_xhs_cookie_value",
+            "bili_jct": "secret_jct_value",
+        }
+        for k, v in secrets.items():
+            tmp_config.set(k, v)
+
+        masked = tmp_config.to_dict()
+        for k in secrets:
+            assert masked[k] == f"{secrets[k][:8]}..."
+
+    def test_to_dict_masks_short_secrets(self, tmp_config):
+        tmp_config.set("short_key", "12345")
+        masked = tmp_config.to_dict()
+        assert masked["short_key"] == "*****"
+
     def test_save_creates_file_with_restricted_permissions(self, tmp_path):
         import stat
         import sys
@@ -89,5 +108,21 @@ class TestConfig:
         if sys.platform != "win32":
             mode = config_file.stat().st_mode
             # File should be owner-only read/write (0o600)
-            assert not (mode & stat.S_IRGRP), "group read should not be set"
-            assert not (mode & stat.S_IROTH), "other read should not be set"
+            assert (mode & 0o777) == 0o600
+
+    def test_save_enforces_permissions_on_existing_file(self, tmp_path):
+        import stat
+        import sys
+        config_file = tmp_path / "existing_config.yaml"
+
+        # Create file with broad permissions
+        with open(config_file, "w") as f:
+            f.write("{}")
+        os.chmod(config_file, 0o644)
+
+        config = Config(config_path=config_file)
+        config.set("secret", "value")
+
+        if sys.platform != "win32":
+            mode = config_file.stat().st_mode
+            assert (mode & 0o777) == 0o600
