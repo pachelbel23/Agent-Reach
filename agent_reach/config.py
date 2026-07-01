@@ -58,6 +58,10 @@ class Config:
                 os.O_WRONLY | os.O_CREAT | os.O_TRUNC,
                 stat.S_IRUSR | stat.S_IWUSR,  # 0o600
             )
+            # Explicitly enforce permissions on existing files too,
+            # as os.open mode only applies to newly created files.
+            if os.name != 'nt':
+                os.chmod(self.config_path, stat.S_IRUSR | stat.S_IWUSR)
             with os.fdopen(fd, "w", encoding="utf-8") as f:
                 yaml.dump(self.data, f, default_flow_style=False, allow_unicode=True)
         except OSError:
@@ -102,9 +106,19 @@ class Config:
     def to_dict(self) -> dict:
         """Return config as dict (masks sensitive values)."""
         masked = {}
+        # Keywords that indicate sensitive data in keys
+        sensitive_keywords = (
+            "key", "token", "password", "proxy",
+            "ct0", "sessdata", "csrf", "secret", "cookie", "jct"
+        )
         for k, v in self.data.items():
-            if any(s in k.lower() for s in ("key", "token", "password", "proxy")):
-                masked[k] = f"{str(v)[:8]}..." if v else None
+            if any(s in k.lower() for s in sensitive_keywords):
+                if not v:
+                    masked[k] = None
+                elif len(str(v)) < 8:
+                    masked[k] = "*" * len(str(v))
+                else:
+                    masked[k] = f"{str(v)[:8]}..."
             else:
                 masked[k] = v
         return masked
