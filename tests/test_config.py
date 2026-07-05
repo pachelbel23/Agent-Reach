@@ -2,6 +2,8 @@
 """Tests for Agent Reach config module."""
 
 import os
+import stat
+import sys
 import tempfile
 from pathlib import Path
 
@@ -79,9 +81,21 @@ class TestConfig:
         assert masked["exa_api_key"] == "super-se..."
         assert masked["normal_setting"] == "visible"
 
+    def test_to_dict_masks_platform_specific_secrets(self, tmp_config):
+        tmp_config.set("twitter_ct0", "secret_ct0_123456")
+        tmp_config.set("bilibili_sessdata", "secret_sessdata_123456")
+        tmp_config.set("bili_jct", "secret_jct_123456")
+        masked = tmp_config.to_dict()
+        assert masked["twitter_ct0"] == "secret_c..."
+        assert masked["bilibili_sessdata"] == "secret_s..."
+        assert masked["bili_jct"] == "secret_j..."
+
+    def test_to_dict_masks_short_secrets(self, tmp_config):
+        tmp_config.set("short_key", "12345")
+        masked = tmp_config.to_dict()
+        assert masked["short_key"] == "****"
+
     def test_save_creates_file_with_restricted_permissions(self, tmp_path):
-        import stat
-        import sys
         config_file = tmp_path / "secure_config.yaml"
         config = Config(config_path=config_file)
         config.set("secret_key", "my-secret")
@@ -89,5 +103,33 @@ class TestConfig:
         if sys.platform != "win32":
             mode = config_file.stat().st_mode
             # File should be owner-only read/write (0o600)
-            assert not (mode & stat.S_IRGRP), "group read should not be set"
-            assert not (mode & stat.S_IROTH), "other read should not be set"
+            assert (mode & 0o777) == 0o600
+
+    def test_save_enforces_permissions_on_existing_file(self, tmp_path):
+        if sys.platform == "win32":
+            pytest.skip("Permission tests not applicable on Windows")
+
+        config_file = tmp_path / "existing_config.yaml"
+        config_file.touch()
+        os.chmod(config_file, 0o644)  # Make it world-readable
+
+        config = Config(config_path=config_file)
+        config.set("secret_key", "my-secret")
+
+        mode = config_file.stat().st_mode
+        assert (mode & 0o777) == 0o600
+
+    def test_config_directory_permissions(self, tmp_path, monkeypatch):
+        if sys.platform == "win32":
+            pytest.skip("Permission tests not applicable on Windows")
+
+        custom_dir = tmp_path / "my_agent_reach"
+        # We need to mock Config.CONFIG_DIR because _ensure_dir only checks against it
+        monkeypatch.setattr(Config, "CONFIG_DIR", custom_dir)
+
+        config_file = custom_dir / "config.yaml"
+        Config(config_path=config_file)
+
+        assert custom_dir.exists()
+        mode = custom_dir.stat().st_mode
+        assert (mode & 0o777) == 0o700

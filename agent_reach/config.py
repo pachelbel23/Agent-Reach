@@ -37,6 +37,12 @@ class Config:
     def _ensure_dir(self):
         """Create config directory if it doesn't exist."""
         self.config_dir.mkdir(parents=True, exist_ok=True)
+        # Enforce 700 permissions on the config directory (Unix only)
+        if os.name != "nt" and self.config_dir == self.CONFIG_DIR:
+            try:
+                os.chmod(self.config_dir, 0o700)
+            except OSError:
+                pass
 
     def load(self):
         """Load config from YAML file."""
@@ -58,6 +64,9 @@ class Config:
                 os.O_WRONLY | os.O_CREAT | os.O_TRUNC,
                 stat.S_IRUSR | stat.S_IWUSR,  # 0o600
             )
+            # Explicitly chmod to 600 in case the file already existed with wider permissions
+            if os.name != "nt":
+                os.chmod(self.config_path, stat.S_IRUSR | stat.S_IWUSR)
             with os.fdopen(fd, "w", encoding="utf-8") as f:
                 yaml.dump(self.data, f, default_flow_style=False, allow_unicode=True)
         except OSError:
@@ -102,9 +111,17 @@ class Config:
     def to_dict(self) -> dict:
         """Return config as dict (masks sensitive values)."""
         masked = {}
+        sensitive_keywords = (
+            "key", "token", "password", "proxy",
+            "ct0", "sessdata", "csrf", "cookie", "jct"
+        )
         for k, v in self.data.items():
-            if any(s in k.lower() for s in ("key", "token", "password", "proxy")):
-                masked[k] = f"{str(v)[:8]}..." if v else None
+            if v and any(s in k.lower() for s in sensitive_keywords):
+                v_str = str(v)
+                if len(v_str) >= 8:
+                    masked[k] = f"{v_str[:8]}..."
+                else:
+                    masked[k] = "****"
             else:
                 masked[k] = v
         return masked
