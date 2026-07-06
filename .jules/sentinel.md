@@ -1,0 +1,4 @@
+## 2025-05-14 - Sensitive Data Leakage in Config Masking
+**Vulnerability:** Incomplete masking of sensitive configuration values. Platform-specific session identifiers (e.g., `ct0`, `sessdata`) were not included in the masking keyword list, and short secrets (under 8 characters) were leaked in their entirety by the `str(v)[:8]` logic.
+**Learning:** Generic security keywords like `key` and `token` are insufficient for applications that integrate with multiple platforms using custom session identifier names. Additionally, slicing-based masking without length checks can expose the full value of short secrets.
+**Prevention:** Maintain an extensible list of sensitive keywords that covers all integrated platforms. Implement a robust masking strategy that handles short strings by fully obscuring them with a fixed-length mask.
