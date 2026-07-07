@@ -91,3 +91,37 @@ class TestConfig:
             # File should be owner-only read/write (0o600)
             assert not (mode & stat.S_IRGRP), "group read should not be set"
             assert not (mode & stat.S_IROTH), "other read should not be set"
+
+    def test_save_enforces_permissions_on_existing_file(self, tmp_path):
+        import stat
+        import sys
+        if sys.platform == "win32":
+            pytest.skip("Permission tests not applicable on Windows")
+
+        config_file = tmp_path / "existing_config.yaml"
+        # Create with loose permissions
+        config_file.write_text("{}")
+        os.chmod(config_file, 0o644)
+        assert (config_file.stat().st_mode & 0o777) == 0o644
+
+        config = Config(config_path=config_file)
+        config.set("key", "value")
+
+        assert (config_file.stat().st_mode & 0o777) == 0o600
+
+    def test_to_dict_masks_platform_specific_secrets(self, tmp_config):
+        tmp_config.set("twitter_ct0", "secret_ct0_value")
+        tmp_config.set("bilibili_sessdata", "secret_sessdata_value")
+        tmp_config.set("xhs_cookie", "secret_xhs_cookie")
+        tmp_config.set("bilibili_csrf", "secret_csrf_value")
+
+        masked = tmp_config.to_dict()
+        assert masked["twitter_ct0"] == "secret_c..."
+        assert masked["bilibili_sessdata"] == "secret_s..."
+        assert masked["xhs_cookie"] == "secret_x..."
+        assert masked["bilibili_csrf"] == "secret_c..."
+
+    def test_to_dict_masks_short_secrets(self, tmp_config):
+        tmp_config.set("short_key", "12345")
+        masked = tmp_config.to_dict()
+        assert masked["short_key"] == "****"
