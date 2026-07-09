@@ -79,6 +79,20 @@ class TestConfig:
         assert masked["exa_api_key"] == "super-se..."
         assert masked["normal_setting"] == "visible"
 
+    def test_to_dict_masks_platform_specific_secrets(self, tmp_config):
+        tmp_config.set("twitter_ct0", "secret_ct0")
+        tmp_config.set("bilibili_sessdata", "secret_sessdata")
+        tmp_config.set("xhs_cookie", "secret_cookie")
+        tmp_config.set("bilibili_jct", "secret_jct")
+        tmp_config.set("csrf_token", "secret_csrf")
+
+        masked = tmp_config.to_dict()
+        assert masked["twitter_ct0"] == "secret_c..."
+        assert masked["bilibili_sessdata"] == "secret_s..."
+        assert masked["xhs_cookie"] == "secret_c..."
+        assert masked["bilibili_jct"] == "secret_j..."
+        assert masked["csrf_token"] == "secret_c..."
+
     def test_save_creates_file_with_restricted_permissions(self, tmp_path):
         import stat
         import sys
@@ -89,5 +103,22 @@ class TestConfig:
         if sys.platform != "win32":
             mode = config_file.stat().st_mode
             # File should be owner-only read/write (0o600)
-            assert not (mode & stat.S_IRGRP), "group read should not be set"
-            assert not (mode & stat.S_IROTH), "other read should not be set"
+            assert (mode & 0o777) == 0o600
+
+    def test_save_enforces_permissions_on_existing_file(self, tmp_path):
+        import stat
+        import sys
+        if sys.platform == "win32":
+            pytest.skip("Permission checks not applicable on Windows")
+
+        config_file = tmp_path / "existing_config.yaml"
+        # Create file with loose permissions
+        config_file.write_text("key: value")
+        os.chmod(config_file, 0o644)
+        assert (config_file.stat().st_mode & 0o777) == 0o644
+
+        config = Config(config_path=config_file)
+        config.set("new_key", "new_value")
+
+        # Permissions should now be restricted to 0o600
+        assert (config_file.stat().st_mode & 0o777) == 0o600

@@ -6,6 +6,7 @@ Auto-creates directory on first use.
 """
 
 import os
+import stat
 from pathlib import Path
 from typing import Any, Optional
 
@@ -37,29 +38,39 @@ class Config:
     def _ensure_dir(self):
         """Create config directory if it doesn't exist."""
         self.config_dir.mkdir(parents=True, exist_ok=True)
+        # Enforce restricted permissions on Unix-like systems (0o700)
+        if os.name != "nt":
+            try:
+                os.chmod(self.config_dir, 0o700)
+            except OSError:
+                pass
 
     def load(self):
         """Load config from YAML file."""
         if self.config_path.exists():
             with open(self.config_path, "r", encoding="utf-8") as f:
-                self.data = yaml.safe_load(f) or {}
+                data = yaml.safe_load(f)
+                self.data = data if isinstance(data, dict) else {}
         else:
             self.data = {}
 
     def save(self):
         """Save config to YAML file."""
         self._ensure_dir()
-        # Create file with restricted permissions from the start to avoid
+        # Create file with restricted permissions (0o600) from the start to avoid
         # a race window where credentials are briefly world-readable.
         try:
-            import stat
             fd = os.open(
                 str(self.config_path),
                 os.O_WRONLY | os.O_CREAT | os.O_TRUNC,
-                stat.S_IRUSR | stat.S_IWUSR,  # 0o600
+                0o600,
             )
             with os.fdopen(fd, "w", encoding="utf-8") as f:
                 yaml.dump(self.data, f, default_flow_style=False, allow_unicode=True)
+
+            # Explicitly enforce permissions on existing files too
+            if os.name != "nt":
+                os.chmod(self.config_path, 0o600)
         except OSError:
             # Fallback for Windows or other edge cases where os.open flags
             # are not fully supported.
@@ -102,8 +113,13 @@ class Config:
     def to_dict(self) -> dict:
         """Return config as dict (masks sensitive values)."""
         masked = {}
+        # Keywords that indicate sensitive data in keys
+        sensitive_keywords = (
+            "key", "token", "password", "proxy",
+            "ct0", "sessdata", "csrf", "cookie", "jct"
+        )
         for k, v in self.data.items():
-            if any(s in k.lower() for s in ("key", "token", "password", "proxy")):
+            if any(s in k.lower() for s in sensitive_keywords):
                 masked[k] = f"{str(v)[:8]}..." if v else None
             else:
                 masked[k] = v
