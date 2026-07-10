@@ -79,6 +79,74 @@ class TestConfig:
         assert masked["exa_api_key"] == "super-se..."
         assert masked["normal_setting"] == "visible"
 
+    def test_to_dict_masks_platform_specific_secrets(self, tmp_config):
+        tmp_config.set("twitter_ct0", "ct0_sensitive_value")
+        tmp_config.set("bilibili_sessdata", "sessdata_sensitive_value")
+        tmp_config.set("bilibili_csrf", "csrf_sensitive_value")
+        tmp_config.set("xhs_cookie", "cookie_sensitive_value")
+        tmp_config.set("bili_jct", "jct_sensitive_value")
+
+        masked = tmp_config.to_dict()
+        assert masked["twitter_ct0"] == "ct0_sens..."
+        assert masked["bilibili_sessdata"] == "sessdata..."
+        assert masked["bilibili_csrf"] == "csrf_sen..."
+        assert masked["xhs_cookie"] == "cookie_s..."
+        assert masked["bili_jct"] == "jct_sens..."
+
+    def test_to_dict_masks_short_secrets(self, tmp_config):
+        tmp_config.set("short_key", "1234567")
+        masked = tmp_config.to_dict()
+        assert masked["short_key"] == "****"
+
+    def test_config_directory_permissions(self, tmp_path, monkeypatch):
+        import stat
+        import sys
+        # Use a real subdirectory named .agent-reach to test directory creation permissions
+        config_dir = tmp_path / ".agent-reach"
+        config_file = config_dir / "config.yaml"
+
+        # We need to make sure Config uses our tmp config_dir
+        config = Config(config_path=config_file)
+
+        if sys.platform != "win32":
+            mode = config_dir.stat().st_mode
+            assert (mode & 0o777) == 0o700, "directory should be owner-only (0o700)"
+
+    def test_config_directory_permissions_skip_if_not_dot_agent_reach(self, tmp_path, monkeypatch):
+        import stat
+        import sys
+        # Use a real subdirectory NOT named .agent-reach
+        config_dir = tmp_path / "not-agent-reach"
+        config_file = config_dir / "config.yaml"
+
+        # Set umask to ensure default is likely NOT 0o700
+        old_umask = os.umask(0o022)
+        try:
+            config = Config(config_path=config_file)
+            if sys.platform != "win32":
+                mode = config_dir.stat().st_mode
+                assert (mode & 0o777) != 0o700, "should NOT enforce 0o700 on arbitrary directories"
+        finally:
+            os.umask(old_umask)
+
+    def test_save_enforces_permissions_on_existing_file(self, tmp_path):
+        import stat
+        import sys
+        config_file = tmp_path / "existing_config.yaml"
+
+        # Create file with loose permissions
+        config_file.touch()
+        if sys.platform != "win32":
+            os.chmod(config_file, 0o644)
+            assert (config_file.stat().st_mode & 0o777) == 0o644
+
+        config = Config(config_path=config_file)
+        config.set("some_key", "some_value")
+
+        if sys.platform != "win32":
+            mode = config_file.stat().st_mode
+            assert (mode & 0o777) == 0o600, "file permissions should be restricted to 0o600 on save"
+
     def test_save_creates_file_with_restricted_permissions(self, tmp_path):
         import stat
         import sys

@@ -37,6 +37,13 @@ class Config:
     def _ensure_dir(self):
         """Create config directory if it doesn't exist."""
         self.config_dir.mkdir(parents=True, exist_ok=True)
+        # Enforce 0o700 (owner only) on the directory only if it's our own .agent-reach dir.
+        # Avoid chmod-ing the user's home or project root.
+        if os.name != "nt" and self.config_dir.name == ".agent-reach":
+            try:
+                os.chmod(self.config_dir, 0o700)
+            except OSError:
+                pass
 
     def load(self):
         """Load config from YAML file."""
@@ -58,6 +65,10 @@ class Config:
                 os.O_WRONLY | os.O_CREAT | os.O_TRUNC,
                 stat.S_IRUSR | stat.S_IWUSR,  # 0o600
             )
+            # Explicit chmod to ensure permissions even if file already existed
+            if os.name != "nt":
+                os.chmod(self.config_path, stat.S_IRUSR | stat.S_IWUSR)
+
             with os.fdopen(fd, "w", encoding="utf-8") as f:
                 yaml.dump(self.data, f, default_flow_style=False, allow_unicode=True)
         except OSError:
@@ -102,9 +113,16 @@ class Config:
     def to_dict(self) -> dict:
         """Return config as dict (masks sensitive values)."""
         masked = {}
+        sensitive_keywords = (
+            "key", "token", "password", "proxy", "ct0", "sessdata", "csrf", "cookie", "jct"
+        )
         for k, v in self.data.items():
-            if any(s in k.lower() for s in ("key", "token", "password", "proxy")):
-                masked[k] = f"{str(v)[:8]}..." if v else None
+            if any(s in k.lower() for s in sensitive_keywords):
+                if v:
+                    val_str = str(v)
+                    masked[k] = f"{val_str[:8]}..." if len(val_str) >= 8 else "****"
+                else:
+                    masked[k] = None
             else:
                 masked[k] = v
         return masked
