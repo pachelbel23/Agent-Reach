@@ -91,3 +91,51 @@ class TestConfig:
             # File should be owner-only read/write (0o600)
             assert not (mode & stat.S_IRGRP), "group read should not be set"
             assert not (mode & stat.S_IROTH), "other read should not be set"
+
+    def test_save_enforces_permissions_on_existing_file(self, tmp_path):
+        import stat
+        import sys
+        if sys.platform == "win32":
+            pytest.skip("Permission enforcement test only for Unix")
+
+        config_file = tmp_path / "existing_config.yaml"
+        # Create with broad permissions
+        config_file.touch()
+        os.chmod(config_file, 0o644)
+
+        config = Config(config_path=config_file)
+        config.set("key", "val")
+
+        mode = config_file.stat().st_mode
+        assert (mode & 0o777) == 0o600
+
+    def test_to_dict_masks_platform_specific_secrets(self, tmp_config):
+        tmp_config.set("twitter_ct0", "secret-ct0-123")
+        tmp_config.set("bilibili_sessdata", "secret-sessdata-123")
+        tmp_config.set("bilibili_jct", "secret-jct-123")
+        masked = tmp_config.to_dict()
+        assert masked["twitter_ct0"] == "secret-c..."
+        assert masked["bilibili_sessdata"] == "secret-s..."
+        assert masked["bilibili_jct"] == "secret-j..."
+
+    def test_to_dict_masks_short_secrets(self, tmp_config):
+        tmp_config.set("short_key", "123")
+        masked = tmp_config.to_dict()
+        assert masked["short_key"] == "****"
+
+    def test_config_directory_permissions(self, tmp_path, monkeypatch):
+        import sys
+        if sys.platform == "win32":
+            pytest.skip("Permission enforcement test only for Unix")
+
+        config_dir = tmp_path / "new_config_dir"
+        config_file = config_dir / "config.yaml"
+
+        # Monkeypatch CONFIG_DIR to test it
+        monkeypatch.setattr(Config, "CONFIG_DIR", config_dir)
+
+        config = Config(config_path=config_file)
+
+        assert config_dir.exists()
+        mode = config_dir.stat().st_mode
+        assert (mode & 0o777) == 0o700
