@@ -1,0 +1,4 @@
+## 2026-07-13 - [Secure Config Storage & Data Masking]
+**Vulnerability:** Configuration file permissions (0o644) allowed other users to read sensitive tokens/cookies on Unix systems. Additionally, platform-specific session identifiers (ct0, sessdata, etc.) were not masked in `to_dict()`, and short secrets leaked their exact length.
+**Learning:** `os.open` with `O_CREAT` and mode bits does not modify the permissions of an existing file; an explicit `os.chmod` is required for security enforcement on overwrites. Generic masking keywords (key, token) miss common platform-specific session names.
+**Prevention:** Always use explicit `os.chmod` after file creation/opening for sensitive files. Use an extensible list of sensitive keywords for data masking and use fixed-length masks for short secrets.
