@@ -8,8 +8,10 @@ Usage:
     agent-reach configure --from-browser chrome
 """
 
-import sys
-from typing import Dict, List, Optional, Tuple
+import json
+import os
+import stat
+from typing import Dict, List, Tuple
 
 
 # Platform cookie specs: (platform_name, domain_pattern, needed_cookies)
@@ -114,12 +116,14 @@ def extract_all(browser: str = "chrome") -> Dict[str, dict]:
 
 def _sync_xfetch_session(auth_token: str, ct0: str) -> None:
     """Sync Twitter credentials to ~/.config/xfetch/session.json for xreach CLI."""
-    import json
-    import os
-
     try:
         xfetch_dir = os.path.join(os.path.expanduser("~"), ".config", "xfetch")
         os.makedirs(xfetch_dir, exist_ok=True)
+        if os.name != "nt":
+            try:
+                os.chmod(xfetch_dir, 0o700)
+            except OSError:
+                pass
         session_path = os.path.join(xfetch_dir, "session.json")
         session_data: dict = {}
         if os.path.exists(session_path):
@@ -130,9 +134,21 @@ def _sync_xfetch_session(auth_token: str, ct0: str) -> None:
                 session_data = {}
         session_data["authToken"] = auth_token
         session_data["ct0"] = ct0
-        with open(session_path, "w", encoding="utf-8") as sf:
+
+        # Securely open/create the file with 0o600 permissions
+        fd = os.open(
+            session_path,
+            os.O_WRONLY | os.O_CREAT | os.O_TRUNC,
+            stat.S_IRUSR | stat.S_IWUSR,  # 0o600
+        )
+        with os.fdopen(fd, "w", encoding="utf-8") as sf:
             json.dump(session_data, sf, indent=2)
-        os.chmod(session_path, 0o600)
+
+        if os.name != "nt":
+            try:
+                os.chmod(session_path, stat.S_IRUSR | stat.S_IWUSR)
+            except OSError:
+                pass
     except Exception:
         # Non-fatal: agent-reach config is the source of truth, xfetch sync is best-effort
         pass
