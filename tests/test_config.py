@@ -1,12 +1,8 @@
 # -*- coding: utf-8 -*-
 """Tests for Agent Reach config module."""
 
-import os
-import tempfile
-from pathlib import Path
 
 import pytest
-import yaml
 
 from agent_reach.config import Config
 
@@ -21,7 +17,7 @@ def tmp_config(tmp_path):
 class TestConfig:
     def test_init_creates_dir(self, tmp_path):
         config_file = tmp_path / "subdir" / "config.yaml"
-        config = Config(config_path=config_file)
+        _config = Config(config_path=config_file)
         assert config_file.parent.exists()
 
     def test_set_and_get(self, tmp_config):
@@ -91,3 +87,48 @@ class TestConfig:
             # File should be owner-only read/write (0o600)
             assert not (mode & stat.S_IRGRP), "group read should not be set"
             assert not (mode & stat.S_IROTH), "other read should not be set"
+
+    def test_sensitive_masking(self, tmp_config):
+        # Long secrets (length >= 8)
+        tmp_config.set("twitter_auth_token", "super-secret-auth-token-value")
+        tmp_config.set("twitter_ct0", "long-ct0-value-12345")
+        tmp_config.set("xhs_cookie", "xhs-cookie-value-long")
+        tmp_config.set("bilibili_sessdata", "sessdata-value-long")
+        tmp_config.set("bilibili_csrf", "bili_jct_csrf_value")
+
+        # Short secrets (length < 8)
+        tmp_config.set("short_key", "abc")
+        tmp_config.set("short_ct0", "ct0_12")
+        tmp_config.set("short_csrf", "csrf_")
+
+        # Falsy sensitive values
+        tmp_config.set("empty_token", "")
+        tmp_config.set("none_password", None)
+        tmp_config.set("false_key", False)
+
+        # Non-sensitive settings (must not contain keywords like "key", "token", etc.)
+        tmp_config.set("normal_setting", "visible")
+        tmp_config.set("falsy_setting", "")
+
+        masked = tmp_config.to_dict()
+
+        # Verify masking of long secrets
+        assert masked["twitter_auth_token"] == "super-se..."
+        assert masked["twitter_ct0"] == "long-ct0..."
+        assert masked["xhs_cookie"] == "xhs-cook..."
+        assert masked["bilibili_sessdata"] == "sessdata..."
+        assert masked["bilibili_csrf"] == "bili_jct..."
+
+        # Verify masking of short secrets with fixed length '*'
+        assert masked["short_key"] == "****"
+        assert masked["short_ct0"] == "****"
+        assert masked["short_csrf"] == "****"
+
+        # Verify preservation of falsy values
+        assert masked["empty_token"] == ""
+        assert masked["none_password"] is None
+        assert masked["false_key"] is False
+
+        # Verify non-sensitive settings are untouched
+        assert masked["normal_setting"] == "visible"
+        assert masked["falsy_setting"] == ""
