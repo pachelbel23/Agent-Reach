@@ -6,6 +6,7 @@ Auto-creates directory on first use.
 """
 
 import os
+import stat
 from pathlib import Path
 from typing import Any, Optional
 
@@ -37,12 +38,18 @@ class Config:
     def _ensure_dir(self):
         """Create config directory if it doesn't exist."""
         self.config_dir.mkdir(parents=True, exist_ok=True)
+        if os.name != "nt":
+            try:
+                os.chmod(self.config_dir, stat.S_IRUSR | stat.S_IWUSR | stat.S_IXUSR)  # 0o700
+            except OSError:
+                pass
 
     def load(self):
         """Load config from YAML file."""
         if self.config_path.exists():
             with open(self.config_path, "r", encoding="utf-8") as f:
-                self.data = yaml.safe_load(f) or {}
+                data = yaml.safe_load(f)
+                self.data = data if isinstance(data, dict) else {}
         else:
             self.data = {}
 
@@ -52,7 +59,6 @@ class Config:
         # Create file with restricted permissions from the start to avoid
         # a race window where credentials are briefly world-readable.
         try:
-            import stat
             fd = os.open(
                 str(self.config_path),
                 os.O_WRONLY | os.O_CREAT | os.O_TRUNC,
@@ -60,6 +66,9 @@ class Config:
             )
             with os.fdopen(fd, "w", encoding="utf-8") as f:
                 yaml.dump(self.data, f, default_flow_style=False, allow_unicode=True)
+            # Explicit chmod to restrict permissions of existing files
+            if os.name != "nt":
+                os.chmod(self.config_path, stat.S_IRUSR | stat.S_IWUSR)
         except OSError:
             # Fallback for Windows or other edge cases where os.open flags
             # are not fully supported.
@@ -103,8 +112,18 @@ class Config:
         """Return config as dict (masks sensitive values)."""
         masked = {}
         for k, v in self.data.items():
-            if any(s in k.lower() for s in ("key", "token", "password", "proxy")):
-                masked[k] = f"{str(v)[:8]}..." if v else None
+            if any(s in k.lower() for s in ("key", "token", "password", "proxy", "ct0", "sessdata", "csrf", "cookie", "jct")):
+                if v is None:
+                    masked[k] = None
+                elif not v and v is not None:
+                    # preserve falsy non-sensitive / non-none values (like empty string or False)
+                    masked[k] = v
+                else:
+                    v_str = str(v)
+                    if len(v_str) >= 8:
+                        masked[k] = f"{v_str[:8]}..."
+                    else:
+                        masked[k] = "****"
             else:
                 masked[k] = v
         return masked
