@@ -6,6 +6,7 @@ Auto-creates directory on first use.
 """
 
 import os
+import stat
 from pathlib import Path
 from typing import Any, Optional
 
@@ -37,6 +38,11 @@ class Config:
     def _ensure_dir(self):
         """Create config directory if it doesn't exist."""
         self.config_dir.mkdir(parents=True, exist_ok=True)
+        if os.name != "nt":
+            try:
+                os.chmod(self.config_dir, stat.S_IRUSR | stat.S_IWUSR | stat.S_IXUSR)  # 0o700
+            except OSError:
+                pass
 
     def load(self):
         """Load config from YAML file."""
@@ -52,7 +58,6 @@ class Config:
         # Create file with restricted permissions from the start to avoid
         # a race window where credentials are briefly world-readable.
         try:
-            import stat
             fd = os.open(
                 str(self.config_path),
                 os.O_WRONLY | os.O_CREAT | os.O_TRUNC,
@@ -60,6 +65,8 @@ class Config:
             )
             with os.fdopen(fd, "w", encoding="utf-8") as f:
                 yaml.dump(self.data, f, default_flow_style=False, allow_unicode=True)
+            if os.name != "nt":
+                os.chmod(self.config_path, stat.S_IRUSR | stat.S_IWUSR)  # Explicitly enforce 0o600 even if file existed
         except OSError:
             # Fallback for Windows or other edge cases where os.open flags
             # are not fully supported.
@@ -103,8 +110,17 @@ class Config:
         """Return config as dict (masks sensitive values)."""
         masked = {}
         for k, v in self.data.items():
-            if any(s in k.lower() for s in ("key", "token", "password", "proxy")):
-                masked[k] = f"{str(v)[:8]}..." if v else None
+            # Match any of the key phrases indicating sensitive information
+            if any(s in k.lower() for s in ("key", "token", "password", "proxy", "ct0", "sessdata", "csrf", "cookie", "jct")):
+                if v:
+                    val_str = str(v)
+                    # For very short secrets, mask with a fixed length string to avoid leaking prefix/length info
+                    if len(val_str) < 8:
+                        masked[k] = "****"
+                    else:
+                        masked[k] = f"{val_str[:8]}..."
+                else:
+                    masked[k] = None
             else:
                 masked[k] = v
         return masked
