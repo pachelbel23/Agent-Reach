@@ -5,8 +5,9 @@ Each channel knows how to check itself. Doctor just collects the results.
 """
 
 from typing import Dict
-from agent_reach.config import Config
+
 from agent_reach.channels import get_all_channels
+from agent_reach.config import Config
 
 
 def check_all(config: Config) -> Dict[str, dict]:
@@ -74,19 +75,33 @@ def format_report(results: Dict[str, dict]) -> str:
     if ok_count < total:
         lines.append("运行 `agent-reach setup` 解锁更多渠道")
 
-    # Security check: config file permissions (Unix only)
+    # Security check: config file and directory permissions (Unix only)
     import os
     import stat
-    import sys
-    config_path = Config.CONFIG_DIR / "config.yaml"
-    if config_path.exists() and sys.platform != "win32":
-        try:
-            mode = config_path.stat().st_mode
-            if mode & (stat.S_IRGRP | stat.S_IROTH):
-                lines.append("")
-                lines.append("[!]  安全提示：config.yaml 权限过宽（其他用户可读）")
-                lines.append("   修复：chmod 600 ~/.agent-reach/config.yaml")
-        except OSError:
-            pass
+
+    if os.name != "nt":
+        # 1. Config directory check
+        config_dir = Config.CONFIG_DIR
+        if config_dir.exists():
+            try:
+                dir_mode = config_dir.stat().st_mode
+                if dir_mode & (stat.S_IRWXG | stat.S_IRWXO):
+                    lines.append("")
+                    lines.append("[!]  安全提示：配置目录 ~/.agent-reach 权限过宽（其他用户可读写）")
+                    lines.append("   修复：chmod 700 ~/.agent-reach")
+            except OSError:
+                pass
+
+        # 2. Config file check
+        config_path = Config.CONFIG_DIR / "config.yaml"
+        if config_path.exists():
+            try:
+                mode = config_path.stat().st_mode
+                if mode & (stat.S_IRWXG | stat.S_IRWXO):
+                    lines.append("")
+                    lines.append("[!]  安全提示：config.yaml 权限过宽（其他用户可读写）")
+                    lines.append("   修复：chmod 600 ~/.agent-reach/config.yaml")
+            except OSError:
+                pass
 
     return "\n".join(lines)
