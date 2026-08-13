@@ -1,0 +1,4 @@
+## 2026-03-09 - [Secure Permissions & Sensitive Value Masking]
+**Vulnerability:** Weak default file permissions (`0o666` or default umask on existing files) on local configuration/credentials and incomplete sensitive masking keywords allowing Twitter/Bilibili tokens to leak in config dictionary dumps.
+**Learning:** `os.open` with `O_CREAT` only restricts file permissions when a new file is created, but won't modify an existing file's broader permissions during overwrites. Explicitly calling `os.chmod` is necessary. Generic masking keywords miss platform-specific session/cookie keys like `ct0`, `sessdata`, `csrf`, and `jct`.
+**Prevention:** Always restrict directory permissions to `0o700` and config files to `0o600` on Unix systems. Use robust, substring-based, case-insensitive checks on an extensible identifier list, and use a fixed `****` mask for short secrets to prevent leaking partial/length information.
