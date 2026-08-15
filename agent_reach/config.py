@@ -102,9 +102,18 @@ class Config:
     def to_dict(self) -> dict:
         """Return config as dict (masks sensitive values)."""
         masked = {}
+        sensitive_keywords = (
+            "key", "token", "password", "proxy", "cookie",
+            "sessdata", "csrf", "ct0", "jct", "secret"
+        )
         for k, v in self.data.items():
-            if any(s in k.lower() for s in ("key", "token", "password", "proxy")):
-                masked[k] = f"{str(v)[:8]}..." if v else None
+            if any(s in k.lower() for s in sensitive_keywords):
+                if v is None or v == "":
+                    masked[k] = v
+                elif len(str(v)) >= 8:
+                    masked[k] = f"{str(v)[:8]}..."
+                else:
+                    masked[k] = "****"
             else:
                 masked[k] = v
         return masked
