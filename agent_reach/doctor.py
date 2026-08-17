@@ -24,7 +24,7 @@ def check_all(config: Config) -> Dict[str, dict]:
     return results
 
 
-def format_report(results: Dict[str, dict]) -> str:
+def format_report(results: Dict[str, dict], config: Config = None) -> str:
     """Format results as a readable text report."""
     lines = []
     lines.append("Agent Reach 状态")
@@ -77,9 +77,8 @@ def format_report(results: Dict[str, dict]) -> str:
     # Security check: config file permissions (Unix only)
     import os
     import stat
-    import sys
-    config_path = Config.CONFIG_DIR / "config.yaml"
-    if config_path.exists() and sys.platform != "win32":
+    config_path = config.config_path if config and hasattr(config, "config_path") else Config.CONFIG_DIR / "config.yaml"
+    if config_path.exists() and os.name != "nt":
         try:
             mode = config_path.stat().st_mode
             if mode & (stat.S_IRGRP | stat.S_IROTH):
