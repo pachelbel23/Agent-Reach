@@ -79,6 +79,53 @@ class TestConfig:
         assert masked["exa_api_key"] == "super-se..."
         assert masked["normal_setting"] == "visible"
 
+    def test_to_dict_masks_short_secrets_and_cookies(self, tmp_config):
+        tmp_config.set("short_key", "12345")
+        tmp_config.set("twitter_ct0", "abcdef1234567890")
+        tmp_config.set("bilibili_sessdata", "sess_12345678")
+        tmp_config.set("bilibili_csrf", "csrf_12345")
+        tmp_config.set("xhs_cookie", "web_session=xyz123")
+        tmp_config.set("bili_jct", "jct_token_value")
+        tmp_config.set("non_sensitive", "hello_world")
+
+        masked = tmp_config.to_dict()
+        assert masked["short_key"] == "****"
+        assert masked["twitter_ct0"] == "abcdef12..."
+        assert masked["bilibili_sessdata"] == "sess_123..."
+        assert masked["bilibili_csrf"] == "csrf_123..."
+        assert masked["xhs_cookie"] == "web_sess..."
+        assert masked["bili_jct"] == "jct_toke..."
+        assert masked["non_sensitive"] == "hello_world"
+
+    def test_sync_xfetch_session_creates_secure_file(self, tmp_path, monkeypatch):
+        import json
+        import stat
+        import sys
+        from agent_reach.cookie_extract import _sync_xfetch_session
+
+        fake_home = tmp_path / "home"
+        monkeypatch.setenv("HOME", str(fake_home))
+        monkeypatch.setattr("os.path.expanduser", lambda p: str(fake_home) if p == "~" else p)
+
+        _sync_xfetch_session("test_auth_token_123", "test_ct0_456")
+
+        xfetch_dir = fake_home / ".config" / "xfetch"
+        session_file = xfetch_dir / "session.json"
+
+        assert session_file.exists()
+        with open(session_file, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        assert data["authToken"] == "test_auth_token_123"
+        assert data["ct0"] == "test_ct0_456"
+
+        if sys.platform != "win32":
+            dir_mode = xfetch_dir.stat().st_mode
+            file_mode = session_file.stat().st_mode
+            assert not (dir_mode & stat.S_IRWXG), "group access on dir should be restricted"
+            assert not (dir_mode & stat.S_IRWXO), "other access on dir should be restricted"
+            assert not (file_mode & stat.S_IRGRP), "group read on file should be restricted"
+            assert not (file_mode & stat.S_IROTH), "other read on file should be restricted"
+
     def test_save_creates_file_with_restricted_permissions(self, tmp_path):
         import stat
         import sys
