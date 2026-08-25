@@ -79,15 +79,68 @@ class TestConfig:
         assert masked["exa_api_key"] == "super-se..."
         assert masked["normal_setting"] == "visible"
 
+    def test_to_dict_masks_short_secrets_and_cookies(self, tmp_config):
+        tmp_config.set("short_key", "secret")
+        tmp_config.set("twitter_ct0", "abcdef1234567890")
+        tmp_config.set("bilibili_sessdata", "sess_data_value_123")
+        tmp_config.set("bilibili_csrf", "csrf")
+        tmp_config.set("xhs_cookie", "cookie_value_here")
+        tmp_config.set("bili_jct", "jct_value_here")
+        tmp_config.set("empty_setting", "")
+        tmp_config.set("false_setting", False)
+
+        masked = tmp_config.to_dict()
+        assert masked["short_key"] == "****"
+        assert masked["twitter_ct0"] == "abcdef12..."
+        assert masked["bilibili_sessdata"] == "sess_dat..."
+        assert masked["bilibili_csrf"] == "****"
+        assert masked["xhs_cookie"] == "cookie_v..."
+        assert masked["bili_jct"] == "jct_valu..."
+        assert masked["empty_setting"] == ""
+        assert masked["false_setting"] is False
+
     def test_save_creates_file_with_restricted_permissions(self, tmp_path):
         import stat
-        import sys
+
         config_file = tmp_path / "secure_config.yaml"
         config = Config(config_path=config_file)
         config.set("secret_key", "my-secret")
 
-        if sys.platform != "win32":
+        if os.name != "nt":
             mode = config_file.stat().st_mode
             # File should be owner-only read/write (0o600)
-            assert not (mode & stat.S_IRGRP), "group read should not be set"
-            assert not (mode & stat.S_IROTH), "other read should not be set"
+            assert not (mode & stat.S_IRWXG), "group permissions should not be set"
+            assert not (mode & stat.S_IRWXO), "other permissions should not be set"
+
+    def test_ensure_dir_enforces_directory_permissions(self, tmp_path):
+        import stat
+
+        config_dir = tmp_path / "test_dir"
+        config_file = config_dir / "config.yaml"
+        Config(config_path=config_file)
+
+        if os.name != "nt":
+            dir_mode = config_dir.stat().st_mode
+            assert not (dir_mode & stat.S_IRWXG), "group permissions should not be set on dir"
+            assert not (dir_mode & stat.S_IRWXO), "other permissions should not be set on dir"
+
+    def test_sync_xfetch_session_creates_secure_file(self, tmp_path, monkeypatch):
+        import stat
+        from agent_reach.cookie_extract import _sync_xfetch_session
+
+        monkeypatch.setenv("HOME", str(tmp_path))
+        _sync_xfetch_session("test_auth_token", "test_ct0")
+
+        xfetch_dir = tmp_path / ".config" / "xfetch"
+        session_file = xfetch_dir / "session.json"
+
+        assert xfetch_dir.exists()
+        assert session_file.exists()
+
+        if os.name != "nt":
+            dir_mode = xfetch_dir.stat().st_mode
+            file_mode = session_file.stat().st_mode
+            assert not (dir_mode & stat.S_IRWXG), "group permissions on xfetch dir should be restricted"
+            assert not (dir_mode & stat.S_IRWXO), "other permissions on xfetch dir should be restricted"
+            assert not (file_mode & stat.S_IRWXG), "group permissions on session.json should be restricted"
+            assert not (file_mode & stat.S_IRWXO), "other permissions on session.json should be restricted"

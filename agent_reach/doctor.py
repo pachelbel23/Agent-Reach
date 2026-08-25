@@ -77,12 +77,11 @@ def format_report(results: Dict[str, dict]) -> str:
     # Security check: config file permissions (Unix only)
     import os
     import stat
-    import sys
     config_path = Config.CONFIG_DIR / "config.yaml"
-    if config_path.exists() and sys.platform != "win32":
+    if config_path.exists() and os.name != "nt":
         try:
             mode = config_path.stat().st_mode
-            if mode & (stat.S_IRGRP | stat.S_IROTH):
+            if mode & (stat.S_IRWXG | stat.S_IRWXO):
                 lines.append("")
                 lines.append("[!]  安全提示：config.yaml 权限过宽（其他用户可读）")
                 lines.append("   修复：chmod 600 ~/.agent-reach/config.yaml")
