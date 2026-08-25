@@ -37,6 +37,11 @@ class Config:
     def _ensure_dir(self):
         """Create config directory if it doesn't exist."""
         self.config_dir.mkdir(parents=True, exist_ok=True)
+        if os.name != "nt":
+            try:
+                os.chmod(self.config_dir, 0o700)
+            except OSError:
+                pass
 
     def load(self):
         """Load config from YAML file."""
@@ -102,9 +107,21 @@ class Config:
     def to_dict(self) -> dict:
         """Return config as dict (masks sensitive values)."""
         masked = {}
+        sensitive_keywords = (
+            "key",
+            "token",
+            "password",
+            "proxy",
+            "ct0",
+            "sessdata",
+            "csrf",
+            "cookie",
+            "jct",
+        )
         for k, v in self.data.items():
-            if any(s in k.lower() for s in ("key", "token", "password", "proxy")):
-                masked[k] = f"{str(v)[:8]}..." if v else None
+            if v and any(s in k.lower() for s in sensitive_keywords):
+                str_v = str(v)
+                masked[k] = f"{str_v[:8]}..." if len(str_v) >= 8 else "****"
             else:
                 masked[k] = v
         return masked
