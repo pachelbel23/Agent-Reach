@@ -30,6 +30,23 @@ class TestCLI:
         assert "Agent Reach" in captured.out
         assert "✅" in captured.out
 
+    def test_configure_twitter_cookies_syncs_session(self, tmp_path, monkeypatch):
+        fake_home = tmp_path / "home"
+        fake_home.mkdir()
+        monkeypatch.setenv("HOME", str(fake_home))
+
+        with patch("shutil.which", return_value=None):
+            with patch("sys.argv", ["agent-reach", "configure", "twitter-cookies", "test_auth_123", "test_ct0_456"]):
+                main()
+
+        xfetch_session = fake_home / ".config" / "xfetch" / "session.json"
+        assert xfetch_session.exists()
+        import json
+        with open(xfetch_session, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        assert data.get("authToken") == "test_auth_123"
+        assert data.get("ct0") == "test_ct0_456"
+
 
 class TestCheckUpdateRetry:
     def test_retry_timeout_classification(self):
