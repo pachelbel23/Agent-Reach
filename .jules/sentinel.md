@@ -1,0 +1,4 @@
+## 2026-08-31 - Sensitive Configuration Data Masking
+**Vulnerability:** `Config.to_dict()` exposed platform session cookies (`twitter_ct0`, `bilibili_sessdata`, `bilibili_csrf`, `xhs_cookie`, `bili_jct`) because sensitive keyword matching only checked for `"key"`, `"token"`, `"password"`, and `"proxy"`. Additionally, short sensitive values (< 8 characters) were partially or fully leaked by `str(v)[:8]`.
+**Learning:** Generic key substring matching for sensitive parameters fails when platforms use non-standard credential parameter names (e.g., `ct0`, `sessdata`, `jct`, `csrf`, `cookie`). Furthermore, slicing a string with `[:8]` on strings shorter than 8 characters returns the entire secret string without masking.
+**Prevention:** Always maintain a comprehensive set of sensitive key identifiers (`cookie`, `secret`, `sessdata`, `csrf`, `ct0`, `jct`) and enforce fixed-length masking (`****`) for short secrets (< 8 chars).
