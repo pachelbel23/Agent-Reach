@@ -5,8 +5,9 @@ Each channel knows how to check itself. Doctor just collects the results.
 """
 
 from typing import Dict
-from agent_reach.config import Config
+
 from agent_reach.channels import get_all_channels
+from agent_reach.config import Config
 
 
 def check_all(config: Config) -> Dict[str, dict]:
@@ -77,9 +78,8 @@ def format_report(results: Dict[str, dict]) -> str:
     # Security check: config file permissions (Unix only)
     import os
     import stat
-    import sys
     config_path = Config.CONFIG_DIR / "config.yaml"
-    if config_path.exists() and sys.platform != "win32":
+    if config_path.exists() and os.name != "nt":
         try:
             mode = config_path.stat().st_mode
             if mode & (stat.S_IRGRP | stat.S_IROTH):
