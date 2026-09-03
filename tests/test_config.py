@@ -2,11 +2,8 @@
 """Tests for Agent Reach config module."""
 
 import os
-import tempfile
-from pathlib import Path
 
 import pytest
-import yaml
 
 from agent_reach.config import Config
 
@@ -79,6 +76,28 @@ class TestConfig:
         assert masked["exa_api_key"] == "super-se..."
         assert masked["normal_setting"] == "visible"
 
+    def test_to_dict_masks_short_secrets_and_cookies(self, tmp_config):
+        tmp_config.set("short_key", "1234")
+        tmp_config.set("twitter_ct0", "ct0_secret_val")
+        tmp_config.set("bilibili_sessdata", "sessdata_val")
+        tmp_config.set("bilibili_csrf", "csrf_val_secret")
+        tmp_config.set("xhs_cookie", "cookie_val")
+        tmp_config.set("bili_jct", "bili_jct_val")
+        tmp_config.set("empty_token", "")
+        tmp_config.set("none_token", None)
+        tmp_config.set("bool_val", False)
+
+        masked = tmp_config.to_dict()
+        assert masked["short_key"] == "****"
+        assert masked["twitter_ct0"] == "ct0_secr..."
+        assert masked["bilibili_sessdata"] == "sessdata..."
+        assert masked["bilibili_csrf"] == "csrf_val..."
+        assert masked["xhs_cookie"] == "cookie_v..."
+        assert masked["bili_jct"] == "bili_jct..."
+        assert masked["empty_token"] == ""
+        assert masked["none_token"] is None
+        assert masked["bool_val"] is False
+
     def test_save_creates_file_with_restricted_permissions(self, tmp_path):
         import stat
         import sys
@@ -91,3 +110,33 @@ class TestConfig:
             # File should be owner-only read/write (0o600)
             assert not (mode & stat.S_IRGRP), "group read should not be set"
             assert not (mode & stat.S_IROTH), "other read should not be set"
+
+    def test_save_enforces_permissions_on_existing_file(self, tmp_path):
+        import stat
+        config_file = tmp_path / "existing_config.yaml"
+        config_file.write_text("old_key: old_val\n")
+        if os.name != "nt":
+            os.chmod(config_file, 0o644)
+
+        config = Config(config_path=config_file)
+        config.set("secret_key", "my-secret")
+
+        if os.name != "nt":
+            mode = config_file.stat().st_mode
+            assert not (mode & stat.S_IRGRP), "group access should be restricted"
+            assert not (mode & stat.S_IROTH), "other access should be restricted"
+
+    def test_ensure_dir_enforces_directory_permissions(self, tmp_path):
+        import stat
+        dir_path = tmp_path / "config_dir"
+        dir_path.mkdir(parents=True, exist_ok=True)
+        if os.name != "nt":
+            os.chmod(dir_path, 0o755)
+
+        config_file = dir_path / "config.yaml"
+        Config(config_path=config_file)
+
+        if os.name != "nt":
+            mode = dir_path.stat().st_mode
+            assert not (mode & stat.S_IRGRP), "group access should be restricted on dir"
+            assert not (mode & stat.S_IROTH), "other access should be restricted on dir"
