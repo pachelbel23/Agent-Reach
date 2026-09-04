@@ -2,11 +2,8 @@
 """Tests for Agent Reach config module."""
 
 import os
-import tempfile
-from pathlib import Path
 
 import pytest
-import yaml
 
 from agent_reach.config import Config
 
@@ -21,7 +18,7 @@ def tmp_config(tmp_path):
 class TestConfig:
     def test_init_creates_dir(self, tmp_path):
         config_file = tmp_path / "subdir" / "config.yaml"
-        config = Config(config_path=config_file)
+        _config = Config(config_path=config_file)
         assert config_file.parent.exists()
 
     def test_set_and_get(self, tmp_config):
@@ -79,6 +76,24 @@ class TestConfig:
         assert masked["exa_api_key"] == "super-se..."
         assert masked["normal_setting"] == "visible"
 
+    def test_to_dict_masks_short_secrets_and_cookies(self, tmp_config):
+        tmp_config.set("short_token", "1234")
+        tmp_config.set("twitter_ct0", "abcdef123456")
+        tmp_config.set("bilibili_sessdata", "sessdata_secret_value")
+        tmp_config.set("bilibili_csrf", "csrf_value_xyz")
+        tmp_config.set("xhs_cookie", "cookie_value_xyz")
+        tmp_config.set("bili_jct", "jct_secret_value")
+        tmp_config.set("empty_val", "")
+
+        masked = tmp_config.to_dict()
+        assert masked["short_token"] == "****"
+        assert masked["twitter_ct0"] == "abcdef12..."
+        assert masked["bilibili_sessdata"] == "sessdata..."
+        assert masked["bilibili_csrf"] == "csrf_val..."
+        assert masked["xhs_cookie"] == "cookie_v..."
+        assert masked["bili_jct"] == "jct_secr..."
+        assert masked["empty_val"] == ""
+
     def test_save_creates_file_with_restricted_permissions(self, tmp_path):
         import stat
         import sys
@@ -91,3 +106,33 @@ class TestConfig:
             # File should be owner-only read/write (0o600)
             assert not (mode & stat.S_IRGRP), "group read should not be set"
             assert not (mode & stat.S_IROTH), "other read should not be set"
+
+    def test_save_enforces_permissions_on_existing_file(self, tmp_path):
+        import sys
+        if sys.platform == "win32":
+            return
+
+        config_file = tmp_path / "existing_config.yaml"
+        config_file.write_text("dummy: data\n")
+        # Explicitly grant wide permissions
+        os.chmod(config_file, 0o644)
+
+        config = Config(config_path=config_file)
+        config.set("secret_key", "my-secret")
+
+        mode = config_file.stat().st_mode
+        assert (mode & 0o777) == 0o600
+
+    def test_ensure_dir_enforces_directory_permissions(self, tmp_path):
+        import sys
+        if sys.platform == "win32":
+            return
+
+        target_dir = tmp_path / "config_dir"
+        target_dir.mkdir(parents=True, exist_ok=True)
+        os.chmod(target_dir, 0o755)
+
+        _config = Config(config_path=target_dir / "config.yaml")
+
+        dir_mode = target_dir.stat().st_mode
+        assert (dir_mode & 0o777) == 0o700
