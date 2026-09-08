@@ -79,6 +79,22 @@ class TestConfig:
         assert masked["exa_api_key"] == "super-se..."
         assert masked["normal_setting"] == "visible"
 
+    def test_to_dict_masks_short_secrets_and_cookies(self, tmp_config):
+        tmp_config.set("short_secret_key", "12345")
+        tmp_config.set("twitter_ct0", "ct0_token_value_12345")
+        tmp_config.set("bilibili_sessdata", "sess_val_12345")
+        tmp_config.set("bilibili_csrf", "csrf_val_12345")
+        tmp_config.set("xhs_cookie", "cookie_val_12345")
+        tmp_config.set("bili_jct", "jct_val_12345")
+
+        masked = tmp_config.to_dict()
+        assert masked["short_secret_key"] == "****"
+        assert masked["twitter_ct0"] == "ct0_toke..."
+        assert masked["bilibili_sessdata"] == "sess_val..."
+        assert masked["bilibili_csrf"] == "csrf_val..."
+        assert masked["xhs_cookie"] == "cookie_v..."
+        assert masked["bili_jct"] == "jct_val_..."
+
     def test_save_creates_file_with_restricted_permissions(self, tmp_path):
         import stat
         import sys
@@ -91,3 +107,19 @@ class TestConfig:
             # File should be owner-only read/write (0o600)
             assert not (mode & stat.S_IRGRP), "group read should not be set"
             assert not (mode & stat.S_IROTH), "other read should not be set"
+
+    def test_save_enforces_permissions_on_existing_file(self, tmp_path):
+        import stat
+        import sys
+        config_file = tmp_path / "existing_config.yaml"
+        # Pre-create file with permissive mode 0o666
+        config_file.write_text("my_setting: initial")
+        os.chmod(config_file, 0o666)
+
+        config = Config(config_path=config_file)
+        config.set("my_setting", "updated")
+
+        if sys.platform != "win32":
+            mode = config_file.stat().st_mode
+            assert not (mode & stat.S_IRGRP), "group read should not be set after save"
+            assert not (mode & stat.S_IROTH), "other read should not be set after save"
