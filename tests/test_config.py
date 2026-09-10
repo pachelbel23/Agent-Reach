@@ -1,12 +1,7 @@
 # -*- coding: utf-8 -*-
 """Tests for Agent Reach config module."""
 
-import os
-import tempfile
-from pathlib import Path
-
 import pytest
-import yaml
 
 from agent_reach.config import Config
 
@@ -78,6 +73,24 @@ class TestConfig:
         masked = tmp_config.to_dict()
         assert masked["exa_api_key"] == "super-se..."
         assert masked["normal_setting"] == "visible"
+
+    def test_to_dict_masks_short_secrets_and_cookies(self, tmp_config):
+        tmp_config.set("short_secret_key", "12345")
+        tmp_config.set("twitter_ct0", "ct0_token_value_12345")
+        tmp_config.set("bilibili_sessdata", "sessdata_value_12345")
+        tmp_config.set("bilibili_csrf", "csrf_value_12345")
+        tmp_config.set("bili_jct", "jct_value_12345")
+        tmp_config.set("xhs_cookie", "cookie_header_value_12345")
+        tmp_config.set("enabled", False)
+
+        masked = tmp_config.to_dict()
+        assert masked["short_secret_key"] == "****"
+        assert masked["twitter_ct0"] == "ct0_toke..."
+        assert masked["bilibili_sessdata"] == "sessdata..."
+        assert masked["bilibili_csrf"] == "csrf_val..."
+        assert masked["bili_jct"] == "jct_valu..."
+        assert masked["xhs_cookie"] == "cookie_h..."
+        assert masked["enabled"] is False
 
     def test_save_creates_file_with_restricted_permissions(self, tmp_path):
         import stat
