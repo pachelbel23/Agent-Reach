@@ -925,24 +925,9 @@ def _cmd_configure(args):
             config.set("twitter_ct0", ct0)
 
             # Sync credentials to xreach's session.json so xreach auth check works
-            try:
-                import json
-                xfetch_dir = os.path.join(os.path.expanduser("~"), ".config", "xfetch")
-                os.makedirs(xfetch_dir, exist_ok=True)
-                session_path = os.path.join(xfetch_dir, "session.json")
-                session_data = {}
-                if os.path.exists(session_path):
-                    with open(session_path, "r", encoding="utf-8") as sf:
-                        session_data = json.load(sf)
-                session_data["authToken"] = auth_token
-                session_data["ct0"] = ct0
-                with open(session_path, "w", encoding="utf-8") as sf:
-                    json.dump(session_data, sf, indent=2)
-                os.chmod(session_path, 0o600)
-                print("✅ Twitter cookies configured (synced to xreach)!")
-            except Exception as e:
-                print("✅ Twitter cookies configured!")
-                print(f"[!] Could not sync to xreach session.json: {e}")
+            from agent_reach.cookie_extract import _sync_xfetch_session
+            _sync_xfetch_session(auth_token, ct0)
+            print("✅ Twitter cookies configured (synced to xreach)!")
 
             print("Testing Twitter access...", end=" ")
             try:

@@ -30,6 +30,15 @@ class TestCLI:
         assert "Agent Reach" in captured.out
         assert "✅" in captured.out
 
+    def test_configure_twitter_cookies_syncs_session(self, capsys):
+        with patch("agent_reach.cookie_extract._sync_xfetch_session") as mock_sync, \
+             patch("shutil.which", return_value=None):
+            with patch("sys.argv", ["agent-reach", "configure", "twitter-cookies", "token123", "ct0_abc"]):
+                main()
+            mock_sync.assert_called_once_with("token123", "ct0_abc")
+        captured = capsys.readouterr()
+        assert "✅ Twitter cookies configured (synced to xreach)!" in captured.out
+
 
 class TestCheckUpdateRetry:
     def test_retry_timeout_classification(self):
