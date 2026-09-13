@@ -91,3 +91,28 @@ class TestConfig:
             # File should be owner-only read/write (0o600)
             assert not (mode & stat.S_IRGRP), "group read should not be set"
             assert not (mode & stat.S_IROTH), "other read should not be set"
+
+    def test_save_enforces_permissions_on_existing_file(self, tmp_path):
+        import stat
+        import sys
+        config_file = tmp_path / "existing_config.yaml"
+        config_file.write_text("old_key: old_val")
+        if sys.platform != "win32":
+            os.chmod(config_file, 0o644)
+
+        config = Config(config_path=config_file)
+        config.set("secret_key", "my-secret")
+
+        if sys.platform != "win32":
+            mode = config_file.stat().st_mode
+            assert (mode & 0o777) == 0o600
+
+    def test_ensure_dir_enforces_directory_permissions(self, tmp_path):
+        import sys
+        config_dir = tmp_path / "custom_config_dir"
+        config_file = config_dir / "config.yaml"
+        config = Config(config_path=config_file)
+
+        if sys.platform != "win32":
+            mode = config_dir.stat().st_mode
+            assert (mode & 0o777) == 0o700
