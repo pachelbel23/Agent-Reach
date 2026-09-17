@@ -1,12 +1,8 @@
 # -*- coding: utf-8 -*-
 """Tests for Agent Reach config module."""
 
-import os
-import tempfile
-from pathlib import Path
 
 import pytest
-import yaml
 
 from agent_reach.config import Config
 
@@ -21,7 +17,7 @@ def tmp_config(tmp_path):
 class TestConfig:
     def test_init_creates_dir(self, tmp_path):
         config_file = tmp_path / "subdir" / "config.yaml"
-        config = Config(config_path=config_file)
+        _ = Config(config_path=config_file)
         assert config_file.parent.exists()
 
     def test_set_and_get(self, tmp_config):
@@ -91,3 +87,49 @@ class TestConfig:
             # File should be owner-only read/write (0o600)
             assert not (mode & stat.S_IRGRP), "group read should not be set"
             assert not (mode & stat.S_IROTH), "other read should not be set"
+
+    def test_ensure_dir_enforces_directory_permissions(self, tmp_path):
+        import stat
+        import sys
+        config_dir = tmp_path / "secure_dir"
+        config_file = config_dir / "config.yaml"
+        Config(config_path=config_file)
+
+        if sys.platform != "win32":
+            mode = config_dir.stat().st_mode
+            assert not (mode & stat.S_IRGRP), "group read on dir should not be set"
+            assert not (mode & stat.S_IROTH), "other read on dir should not be set"
+            assert not (mode & stat.S_IXGRP), "group exec on dir should not be set"
+            assert not (mode & stat.S_IXOTH), "other exec on dir should not be set"
+
+    def test_sync_xfetch_session_creates_secure_file(self, tmp_path, monkeypatch):
+        import json
+        import stat
+        import sys
+
+        from agent_reach.cookie_extract import _sync_xfetch_session
+
+        fake_home = tmp_path / "fake_home"
+        fake_home.mkdir()
+        monkeypatch.setenv("HOME", str(fake_home))
+
+        _sync_xfetch_session("test_token_123", "test_ct0_456")
+
+        xfetch_dir = fake_home / ".config" / "xfetch"
+        session_file = xfetch_dir / "session.json"
+
+        assert xfetch_dir.exists()
+        assert session_file.exists()
+
+        data = json.loads(session_file.read_text(encoding="utf-8"))
+        assert data["authToken"] == "test_token_123"
+        assert data["ct0"] == "test_ct0_456"
+
+        if sys.platform != "win32":
+            dir_mode = xfetch_dir.stat().st_mode
+            assert not (dir_mode & stat.S_IRGRP), "group read on xfetch dir should not be set"
+            assert not (dir_mode & stat.S_IROTH), "other read on xfetch dir should not be set"
+
+            file_mode = session_file.stat().st_mode
+            assert not (file_mode & stat.S_IRGRP), "group read on session file should not be set"
+            assert not (file_mode & stat.S_IROTH), "other read on session file should not be set"
