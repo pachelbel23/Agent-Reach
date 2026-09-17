@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
 
-from unittest.mock import patch, Mock
+from unittest.mock import Mock, patch
 
-from agent_reach.channels.twitter import _detect_xreach_version, TwitterChannel
+from agent_reach.channels.twitter import TwitterChannel, _detect_xreach_version
 
 
 def _cp(stdout="", stderr="", returncode=0):
