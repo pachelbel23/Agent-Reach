@@ -35,8 +35,13 @@ class Config:
         self.load()
 
     def _ensure_dir(self):
-        """Create config directory if it doesn't exist."""
+        """Create config directory if it doesn't exist and restrict permissions on Unix."""
         self.config_dir.mkdir(parents=True, exist_ok=True)
+        if os.name != "nt":
+            try:
+                os.chmod(self.config_dir, 0o700)
+            except OSError:
+                pass
 
     def load(self):
         """Load config from YAML file."""
@@ -52,11 +57,10 @@ class Config:
         # Create file with restricted permissions from the start to avoid
         # a race window where credentials are briefly world-readable.
         try:
-            import stat
             fd = os.open(
                 str(self.config_path),
                 os.O_WRONLY | os.O_CREAT | os.O_TRUNC,
-                stat.S_IRUSR | stat.S_IWUSR,  # 0o600
+                0o600,
             )
             with os.fdopen(fd, "w", encoding="utf-8") as f:
                 yaml.dump(self.data, f, default_flow_style=False, allow_unicode=True)
@@ -65,6 +69,12 @@ class Config:
             # are not fully supported.
             with open(self.config_path, "w", encoding="utf-8") as f:
                 yaml.dump(self.data, f, default_flow_style=False, allow_unicode=True)
+
+        if os.name != "nt":
+            try:
+                os.chmod(self.config_path, 0o600)
+            except OSError:
+                pass
 
     def get(self, key: str, default: Any = None) -> Any:
         """Get a config value. Also checks environment variables (uppercase)."""

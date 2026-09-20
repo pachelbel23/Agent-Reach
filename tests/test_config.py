@@ -81,13 +81,37 @@ class TestConfig:
 
     def test_save_creates_file_with_restricted_permissions(self, tmp_path):
         import stat
-        import sys
         config_file = tmp_path / "secure_config.yaml"
         config = Config(config_path=config_file)
         config.set("secret_key", "my-secret")
 
-        if sys.platform != "win32":
+        if os.name != "nt":
             mode = config_file.stat().st_mode
             # File should be owner-only read/write (0o600)
             assert not (mode & stat.S_IRGRP), "group read should not be set"
             assert not (mode & stat.S_IROTH), "other read should not be set"
+
+    def test_save_enforces_permissions_on_existing_file(self, tmp_path):
+        config_file = tmp_path / "existing_config.yaml"
+        # Create file with broad permissions (0o644)
+        config_file.write_text("key: value")
+        os.chmod(config_file, 0o644)
+
+        config = Config(config_path=config_file)
+        config.set("secret_key", "my-secret")
+
+        if os.name != "nt":
+            mode = config_file.stat().st_mode & 0o777
+            assert mode == 0o600, f"Expected permissions 0o600, got {oct(mode)}"
+
+    def test_ensure_dir_enforces_directory_permissions(self, tmp_path):
+        config_dir = tmp_path / "insecure_dir"
+        config_dir.mkdir(mode=0o755, parents=True, exist_ok=True)
+        os.chmod(config_dir, 0o755)
+
+        config_file = config_dir / "config.yaml"
+        Config(config_path=config_file)
+
+        if os.name != "nt":
+            dir_mode = config_dir.stat().st_mode & 0o777
+            assert dir_mode == 0o700, f"Expected dir permissions 0o700, got {oct(dir_mode)}"
