@@ -8,9 +8,7 @@ Usage:
     agent-reach configure --from-browser chrome
 """
 
-import sys
-from typing import Dict, List, Optional, Tuple
-
+from typing import Dict, List, Tuple
 
 # Platform cookie specs: (platform_name, domain_pattern, needed_cookies)
 PLATFORM_SPECS = [
@@ -113,13 +111,19 @@ def extract_all(browser: str = "chrome") -> Dict[str, dict]:
 
 
 def _sync_xfetch_session(auth_token: str, ct0: str) -> None:
-    """Sync Twitter credentials to ~/.config/xfetch/session.json for xreach CLI."""
+    """Sync Twitter credentials to ~/.config/xfetch/session.json for xreach CLI securely."""
     import json
     import os
 
     try:
         xfetch_dir = os.path.join(os.path.expanduser("~"), ".config", "xfetch")
         os.makedirs(xfetch_dir, exist_ok=True)
+        if os.name != "nt":
+            try:
+                os.chmod(xfetch_dir, 0o700)
+            except OSError:
+                pass
+
         session_path = os.path.join(xfetch_dir, "session.json")
         session_data: dict = {}
         if os.path.exists(session_path):
@@ -130,9 +134,20 @@ def _sync_xfetch_session(auth_token: str, ct0: str) -> None:
                 session_data = {}
         session_data["authToken"] = auth_token
         session_data["ct0"] = ct0
-        with open(session_path, "w", encoding="utf-8") as sf:
-            json.dump(session_data, sf, indent=2)
-        os.chmod(session_path, 0o600)
+
+        if os.name != "nt":
+            import stat
+            fd = os.open(
+                session_path,
+                os.O_WRONLY | os.O_CREAT | os.O_TRUNC,
+                stat.S_IRUSR | stat.S_IWUSR,
+            )
+            with os.fdopen(fd, "w", encoding="utf-8") as sf:
+                json.dump(session_data, sf, indent=2)
+            os.chmod(session_path, 0o600)
+        else:
+            with open(session_path, "w", encoding="utf-8") as sf:
+                json.dump(session_data, sf, indent=2)
     except Exception:
         # Non-fatal: agent-reach config is the source of truth, xfetch sync is best-effort
         pass
