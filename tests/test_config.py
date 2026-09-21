@@ -1,14 +1,15 @@
 # -*- coding: utf-8 -*-
 """Tests for Agent Reach config module."""
 
+import json
 import os
-import tempfile
-from pathlib import Path
+import stat
+import sys
 
 import pytest
-import yaml
 
 from agent_reach.config import Config
+from agent_reach.cookie_extract import _sync_xfetch_session
 
 
 @pytest.fixture
@@ -21,7 +22,7 @@ def tmp_config(tmp_path):
 class TestConfig:
     def test_init_creates_dir(self, tmp_path):
         config_file = tmp_path / "subdir" / "config.yaml"
-        config = Config(config_path=config_file)
+        _ = Config(config_path=config_file)
         assert config_file.parent.exists()
 
     def test_set_and_get(self, tmp_config):
@@ -91,3 +92,26 @@ class TestConfig:
             # File should be owner-only read/write (0o600)
             assert not (mode & stat.S_IRGRP), "group read should not be set"
             assert not (mode & stat.S_IROTH), "other read should not be set"
+
+    def test_sync_xfetch_session_creates_secure_file(self, tmp_path, monkeypatch):
+        fake_home = tmp_path / "home"
+        fake_home.mkdir()
+        monkeypatch.setenv("HOME", str(fake_home))
+        monkeypatch.setattr(os.path, "expanduser", lambda p: str(fake_home) if p == "~" else p)
+
+        _sync_xfetch_session("test_token", "test_ct0")
+
+        session_file = fake_home / ".config" / "xfetch" / "session.json"
+        assert session_file.exists()
+
+        data = json.loads(session_file.read_text(encoding="utf-8"))
+        assert data.get("authToken") == "test_token"
+        assert data.get("ct0") == "test_ct0"
+
+        if sys.platform != "win32":
+            dir_mode = session_file.parent.stat().st_mode
+            file_mode = session_file.stat().st_mode
+            assert not (dir_mode & stat.S_IRGRP), "directory group read should not be set"
+            assert not (dir_mode & stat.S_IROTH), "directory other read should not be set"
+            assert not (file_mode & stat.S_IRGRP), "file group read should not be set"
+            assert not (file_mode & stat.S_IROTH), "file other read should not be set"
