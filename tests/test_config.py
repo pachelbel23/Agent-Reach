@@ -1,12 +1,8 @@
 # -*- coding: utf-8 -*-
 """Tests for Agent Reach config module."""
 
-import os
-import tempfile
-from pathlib import Path
 
 import pytest
-import yaml
 
 from agent_reach.config import Config
 
@@ -78,6 +74,69 @@ class TestConfig:
         masked = tmp_config.to_dict()
         assert masked["exa_api_key"] == "super-se..."
         assert masked["normal_setting"] == "visible"
+
+    def test_to_dict_masks_short_secrets_and_cookies(self, tmp_config):
+        tmp_config.set("short_key", "abc")
+        tmp_config.set("twitter_ct0", "ct0val123456")
+        tmp_config.set("bilibili_sessdata", "sess123456")
+        tmp_config.set("bilibili_csrf", "csrf123")
+        tmp_config.set("xhs_cookie", "cookie123456")
+        tmp_config.set("bili_jct", "jctval123")
+        tmp_config.set("non_sensitive", False)
+
+        masked = tmp_config.to_dict()
+        assert masked["short_key"] == "****"
+        assert masked["twitter_ct0"] == "ct0val12..."
+        assert masked["bilibili_sessdata"] == "sess1234..."
+        assert masked["bilibili_csrf"] == "****"
+        assert masked["xhs_cookie"] == "cookie12..."
+        assert masked["bili_jct"] == "jctval12..."
+        assert masked["non_sensitive"] is False
+
+    def test_ensure_dir_enforces_directory_permissions(self, tmp_path):
+        import stat
+        import sys
+        secure_dir = tmp_path / "custom_config_dir"
+        config_file = secure_dir / "config.yaml"
+        _config = Config(config_path=config_file)
+
+        if sys.platform != "win32":
+            mode = secure_dir.stat().st_mode
+            assert not (mode & stat.S_IRGRP), "group read on dir should not be set"
+            assert not (mode & stat.S_IWGRP), "group write on dir should not be set"
+            assert not (mode & stat.S_IXGRP), "group exec on dir should not be set"
+            assert not (mode & stat.S_IROTH), "other read on dir should not be set"
+
+    def test_sync_xfetch_session_creates_secure_file(self, tmp_path, monkeypatch):
+        import json
+        import stat
+        import sys
+
+        from agent_reach.cookie_extract import _sync_xfetch_session
+
+        fake_home = tmp_path / "home"
+        fake_home.mkdir()
+        monkeypatch.setenv("HOME", str(fake_home))
+
+        _sync_xfetch_session("test_auth_token", "test_ct0")
+
+        xfetch_dir = fake_home / ".config" / "xfetch"
+        session_file = xfetch_dir / "session.json"
+
+        assert session_file.exists()
+        with open(session_file, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        assert data["authToken"] == "test_auth_token"
+        assert data["ct0"] == "test_ct0"
+
+        if sys.platform != "win32":
+            dir_mode = xfetch_dir.stat().st_mode
+            assert not (dir_mode & stat.S_IRGRP)
+            assert not (dir_mode & stat.S_IROTH)
+
+            file_mode = session_file.stat().st_mode
+            assert not (file_mode & stat.S_IRGRP)
+            assert not (file_mode & stat.S_IROTH)
 
     def test_save_creates_file_with_restricted_permissions(self, tmp_path):
         import stat
