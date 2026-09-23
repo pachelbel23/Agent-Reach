@@ -1,0 +1,4 @@
+## 2025-05-18 - Masking Platform Cookies & Overwrite Permissions
+**Vulnerability:** Unmasked platform session credentials (`twitter_ct0`, `bilibili_sessdata`, `bilibili_csrf`, `xhs_cookie`) in `Config.to_dict()` and un-enforced file permissions when updating pre-existing config files in `Config.save()`.
+**Learning:** Generic key matching (`key`, `token`, `password`, `proxy`) misses platform-specific authentication cookie keys. Additionally, `os.open` with `O_CREAT` does not modify permissions of pre-existing files, requiring explicit `os.chmod`.
+**Prevention:** Include all platform cookie keywords (`ct0`, `sessdata`, `csrf`, `cookie`, `jct`, `secret`) in `to_dict()`, replace short secrets with fixed-length mask (`****`), and always call `os.chmod` explicitly when writing/saving config files on non-Windows platforms.
