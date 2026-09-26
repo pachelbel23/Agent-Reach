@@ -2,11 +2,8 @@
 """Tests for Agent Reach config module."""
 
 import os
-import tempfile
-from pathlib import Path
 
 import pytest
-import yaml
 
 from agent_reach.config import Config
 
@@ -21,7 +18,7 @@ def tmp_config(tmp_path):
 class TestConfig:
     def test_init_creates_dir(self, tmp_path):
         config_file = tmp_path / "subdir" / "config.yaml"
-        config = Config(config_path=config_file)
+        _ = Config(config_path=config_file)
         assert config_file.parent.exists()
 
     def test_set_and_get(self, tmp_config):
@@ -79,6 +76,22 @@ class TestConfig:
         assert masked["exa_api_key"] == "super-se..."
         assert masked["normal_setting"] == "visible"
 
+    def test_to_dict_masks_short_secrets_and_cookies(self, tmp_config):
+        tmp_config.set("twitter_ct0", "1234567890abcdef")
+        tmp_config.set("bilibili_sessdata", "sess_123456789")
+        tmp_config.set("xhs_cookie", "a=1; b=2; c=3")
+        tmp_config.set("bili_jct", "jct_token_1234")
+        tmp_config.set("short_secret_key", "secret")
+        tmp_config.set("app_mode", "production")
+
+        masked = tmp_config.to_dict()
+        assert masked["twitter_ct0"] == "12345678..."
+        assert masked["bilibili_sessdata"] == "sess_123..."
+        assert masked["xhs_cookie"] == "a=1; b=2..."
+        assert masked["bili_jct"] == "jct_toke..."
+        assert masked["short_secret_key"] == "****"
+        assert masked["app_mode"] == "production"
+
     def test_save_creates_file_with_restricted_permissions(self, tmp_path):
         import stat
         import sys
@@ -91,3 +104,31 @@ class TestConfig:
             # File should be owner-only read/write (0o600)
             assert not (mode & stat.S_IRGRP), "group read should not be set"
             assert not (mode & stat.S_IROTH), "other read should not be set"
+
+    def test_save_enforces_permissions_on_existing_file(self, tmp_path):
+        import stat
+        import sys
+        config_file = tmp_path / "existing_config.yaml"
+        config_file.write_text("old: data", encoding="utf-8")
+        if sys.platform != "win32":
+            os.chmod(config_file, 0o644)
+
+        config = Config(config_path=config_file)
+        config.set("secret_key", "my-secret")
+
+        if sys.platform != "win32":
+            mode = config_file.stat().st_mode
+            assert not (mode & stat.S_IRGRP), "group read should not be set on existing file"
+            assert not (mode & stat.S_IROTH), "other read should not be set on existing file"
+
+    def test_ensure_dir_enforces_directory_permissions(self, tmp_path):
+        import stat
+        import sys
+        sub_dir = tmp_path / "config_dir"
+        config_file = sub_dir / "config.yaml"
+        Config(config_path=config_file)
+
+        if sys.platform != "win32":
+            dir_mode = sub_dir.stat().st_mode
+            assert not (dir_mode & stat.S_IRGRP), "group read on dir should not be set"
+            assert not (dir_mode & stat.S_IROTH), "other read on dir should not be set"
