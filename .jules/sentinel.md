@@ -1,0 +1,4 @@
+## 2025-05-18 - Existing Config Permissions & Short Secret Masking
+**Vulnerability:** `Config.save()` did not update permissions when overwriting existing `config.yaml` files, leaving them group/world-readable if created with broader permissions. Additionally, `Config.to_dict()` leaked short secrets (< 8 chars) in plain text and missed platform cookies/tokens (`twitter_ct0`, `bilibili_sessdata`, `xhs_cookie`, etc.).
+**Learning:** `os.open` with `O_CREAT` only applies mode bits upon initial file creation, ignoring them if the target file pre-exists. Explicit `os.chmod` calls are necessary on Unix systems. Moreover, truncating sensitive values with `[:8]` reveals short secrets in full.
+**Prevention:** Always invoke explicit `os.chmod` on configuration files and directories upon saving, mask short sensitive strings with a fixed-length string (`****`), and maintain a complete tuple of sensitive session keywords.
