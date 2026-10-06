@@ -1,12 +1,7 @@
 # -*- coding: utf-8 -*-
 """Tests for Agent Reach config module."""
 
-import os
-import tempfile
-from pathlib import Path
-
 import pytest
-import yaml
 
 from agent_reach.config import Config
 
@@ -21,7 +16,7 @@ def tmp_config(tmp_path):
 class TestConfig:
     def test_init_creates_dir(self, tmp_path):
         config_file = tmp_path / "subdir" / "config.yaml"
-        config = Config(config_path=config_file)
+        _ = Config(config_path=config_file)
         assert config_file.parent.exists()
 
     def test_set_and_get(self, tmp_config):
@@ -78,6 +73,40 @@ class TestConfig:
         masked = tmp_config.to_dict()
         assert masked["exa_api_key"] == "super-se..."
         assert masked["normal_setting"] == "visible"
+
+    def test_to_dict_masks_short_secrets_and_cookies(self, tmp_config):
+        tmp_config.set("short_secret", "12345")
+        tmp_config.set("twitter_ct0", "abcdef123456")
+        tmp_config.set("bilibili_sessdata", "sessdata_val_123")
+        tmp_config.set("bilibili_csrf", "csrf_val_123")
+        tmp_config.set("xhs_cookie", "cookie_val_123")
+        tmp_config.set("bili_jct", "jct_val_123")
+        tmp_config.set("plain_name", "john")
+
+        masked = tmp_config.to_dict()
+        assert masked["short_secret"] == "****"
+        assert masked["twitter_ct0"] == "abcdef12..."
+        assert masked["bilibili_sessdata"] == "sessdata..."
+        assert masked["bilibili_csrf"] == "csrf_val..."
+        assert masked["xhs_cookie"] == "cookie_v..."
+        assert masked["bili_jct"] == "jct_val_..."
+        assert masked["plain_name"] == "john"
+
+    def test_ensure_dir_enforces_directory_permissions(self, tmp_path):
+        import stat
+        import sys
+        config_dir = tmp_path / "secure_dir"
+        config_file = config_dir / "config.yaml"
+        _ = Config(config_path=config_file)
+
+        if sys.platform != "win32":
+            mode = config_dir.stat().st_mode
+            assert not (mode & stat.S_IRGRP), "group read on dir should not be set"
+            assert not (mode & stat.S_IWGRP), "group write on dir should not be set"
+            assert not (mode & stat.S_IXGRP), "group exec on dir should not be set"
+            assert not (mode & stat.S_IROTH), "other read on dir should not be set"
+            assert not (mode & stat.S_IWOTH), "other write on dir should not be set"
+            assert not (mode & stat.S_IXOTH), "other exec on dir should not be set"
 
     def test_save_creates_file_with_restricted_permissions(self, tmp_path):
         import stat
