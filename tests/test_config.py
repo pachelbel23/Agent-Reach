@@ -1,12 +1,7 @@
 # -*- coding: utf-8 -*-
 """Tests for Agent Reach config module."""
 
-import os
-import tempfile
-from pathlib import Path
-
 import pytest
-import yaml
 
 from agent_reach.config import Config
 
@@ -79,6 +74,27 @@ class TestConfig:
         assert masked["exa_api_key"] == "super-se..."
         assert masked["normal_setting"] == "visible"
 
+    def test_to_dict_masks_short_secrets_and_cookies(self, tmp_config):
+        tmp_config.set("short_secret", "12345")
+        tmp_config.set("twitter_ct0", "abcdef1234567890")
+        tmp_config.set("bilibili_sessdata", "sess_val_12345")
+        tmp_config.set("xhs_cookie", "cookie_val_12345")
+        masked = tmp_config.to_dict()
+        assert masked["short_secret"] == "****"
+        assert masked["twitter_ct0"] == "abcdef12..."
+        assert masked["bilibili_sessdata"] == "sess_val..."
+        assert masked["xhs_cookie"] == "cookie_v..."
+
+    def test_ensure_dir_enforces_directory_permissions(self, tmp_path):
+        import stat
+        import sys
+        config_file = tmp_path / "secure_dir" / "config.yaml"
+        Config(config_path=config_file)
+        if sys.platform != "win32":
+            mode = config_file.parent.stat().st_mode
+            assert not (mode & stat.S_IRGRP), "group read should not be set on directory"
+            assert not (mode & stat.S_IROTH), "other read should not be set on directory"
+
     def test_save_creates_file_with_restricted_permissions(self, tmp_path):
         import stat
         import sys
@@ -91,3 +107,19 @@ class TestConfig:
             # File should be owner-only read/write (0o600)
             assert not (mode & stat.S_IRGRP), "group read should not be set"
             assert not (mode & stat.S_IROTH), "other read should not be set"
+
+    def test_sync_xfetch_session_creates_secure_file(self, tmp_path, monkeypatch):
+        import stat
+        import sys
+        from agent_reach.cookie_extract import _sync_xfetch_session
+        monkeypatch.setenv("HOME", str(tmp_path))
+        _sync_xfetch_session("test_token_123", "test_ct0_456")
+        session_file = tmp_path / ".config" / "xfetch" / "session.json"
+        assert session_file.exists()
+        if sys.platform != "win32":
+            mode = session_file.stat().st_mode
+            assert not (mode & stat.S_IRGRP)
+            assert not (mode & stat.S_IROTH)
+            dir_mode = session_file.parent.stat().st_mode
+            assert not (dir_mode & stat.S_IRGRP)
+            assert not (dir_mode & stat.S_IROTH)
