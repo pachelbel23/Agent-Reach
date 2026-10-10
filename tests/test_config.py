@@ -1,12 +1,7 @@
 # -*- coding: utf-8 -*-
 """Tests for Agent Reach config module."""
 
-import os
-import tempfile
-from pathlib import Path
-
 import pytest
-import yaml
 
 from agent_reach.config import Config
 
@@ -21,7 +16,7 @@ def tmp_config(tmp_path):
 class TestConfig:
     def test_init_creates_dir(self, tmp_path):
         config_file = tmp_path / "subdir" / "config.yaml"
-        config = Config(config_path=config_file)
+        Config(config_path=config_file)
         assert config_file.parent.exists()
 
     def test_set_and_get(self, tmp_config):
@@ -78,6 +73,26 @@ class TestConfig:
         masked = tmp_config.to_dict()
         assert masked["exa_api_key"] == "super-se..."
         assert masked["normal_setting"] == "visible"
+
+    def test_to_dict_masks_short_secrets_and_cookies(self, tmp_config):
+        tmp_config.set("short_secret", "12345")
+        tmp_config.set("twitter_ct0", "abcd1234efgh5678")
+        tmp_config.set("bilibili_sessdata", "sessdata_value_long")
+        tmp_config.set("bilibili_csrf", "short")
+        tmp_config.set("xhs_cookie", "cookie_content")
+        tmp_config.set("bili_jct", "jct_token_123")
+        tmp_config.set("empty_token", "")
+        tmp_config.set("unrelated_field", "value")
+
+        masked = tmp_config.to_dict()
+        assert masked["short_secret"] == "****"
+        assert masked["twitter_ct0"] == "abcd1234..."
+        assert masked["bilibili_sessdata"] == "sessdata..."
+        assert masked["bilibili_csrf"] == "****"
+        assert masked["xhs_cookie"] == "cookie_c..."
+        assert masked["bili_jct"] == "jct_toke..."
+        assert masked["empty_token"] == ""
+        assert masked["unrelated_field"] == "value"
 
     def test_save_creates_file_with_restricted_permissions(self, tmp_path):
         import stat
