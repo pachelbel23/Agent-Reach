@@ -2,11 +2,8 @@
 """Tests for Agent Reach config module."""
 
 import os
-import tempfile
-from pathlib import Path
 
 import pytest
-import yaml
 
 from agent_reach.config import Config
 
@@ -21,7 +18,7 @@ def tmp_config(tmp_path):
 class TestConfig:
     def test_init_creates_dir(self, tmp_path):
         config_file = tmp_path / "subdir" / "config.yaml"
-        config = Config(config_path=config_file)
+        Config(config_path=config_file)
         assert config_file.parent.exists()
 
     def test_set_and_get(self, tmp_config):
@@ -91,3 +88,33 @@ class TestConfig:
             # File should be owner-only read/write (0o600)
             assert not (mode & stat.S_IRGRP), "group read should not be set"
             assert not (mode & stat.S_IROTH), "other read should not be set"
+
+    def test_save_enforces_permissions_on_existing_file(self, tmp_path):
+        import sys
+        config_file = tmp_path / "existing_config.yaml"
+
+        # Pre-create file with permissive mode 0o644
+        config_file.write_text("existing: data", encoding="utf-8")
+        if sys.platform != "win32":
+            os.chmod(config_file, 0o644)
+
+        config = Config(config_path=config_file)
+        config.set("secret_key", "my-secret")
+
+        if sys.platform != "win32":
+            mode = config_file.stat().st_mode & 0o777
+            assert mode == 0o600, f"Expected 0o600 permission, got {oct(mode)}"
+
+    def test_ensure_dir_enforces_directory_permissions(self, tmp_path):
+        import sys
+        subdir = tmp_path / "permissive_dir"
+        subdir.mkdir(parents=True, exist_ok=True)
+        if sys.platform != "win32":
+            os.chmod(subdir, 0o755)
+
+        config_file = subdir / "config.yaml"
+        Config(config_path=config_file)
+
+        if sys.platform != "win32":
+            mode = subdir.stat().st_mode & 0o777
+            assert mode == 0o700, f"Expected 0o700 permission, got {oct(mode)}"
