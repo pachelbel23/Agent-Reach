@@ -74,9 +74,23 @@ class TestConfig:
 
     def test_to_dict_masks_sensitive(self, tmp_config):
         tmp_config.set("exa_api_key", "super-secret-key-12345")
+        tmp_config.set("twitter_auth_token", "auth123456789")
+        tmp_config.set("twitter_ct0", "ct0val12345678")
+        tmp_config.set("bilibili_sessdata", "sessdata123456")
+        tmp_config.set("bilibili_csrf", "csrf12345678")
+        tmp_config.set("xhs_cookie", "cookie_value_123")
+        tmp_config.set("app_secret", "secret_value_123")
         tmp_config.set("normal_setting", "visible")
+
         masked = tmp_config.to_dict()
+
         assert masked["exa_api_key"] == "super-se..."
+        assert masked["twitter_auth_token"] == "auth1234..."
+        assert masked["twitter_ct0"] == "ct0val12..."
+        assert masked["bilibili_sessdata"] == "sessdata..."
+        assert masked["bilibili_csrf"] == "csrf1234..."
+        assert masked["xhs_cookie"] == "cookie_v..."
+        assert masked["app_secret"] == "secret_v..."
         assert masked["normal_setting"] == "visible"
 
     def test_save_creates_file_with_restricted_permissions(self, tmp_path):
