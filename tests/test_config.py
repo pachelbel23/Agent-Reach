@@ -1,12 +1,7 @@
 # -*- coding: utf-8 -*-
 """Tests for Agent Reach config module."""
 
-import os
-import tempfile
-from pathlib import Path
-
 import pytest
-import yaml
 
 from agent_reach.config import Config
 
@@ -74,10 +69,28 @@ class TestConfig:
 
     def test_to_dict_masks_sensitive(self, tmp_config):
         tmp_config.set("exa_api_key", "super-secret-key-12345")
-        tmp_config.set("normal_setting", "visible")
+        tmp_config.set("unrelated_mode", "visible")
         masked = tmp_config.to_dict()
         assert masked["exa_api_key"] == "super-se..."
-        assert masked["normal_setting"] == "visible"
+        assert masked["unrelated_mode"] == "visible"
+
+    def test_to_dict_masks_short_secrets_and_cookies(self, tmp_config):
+        tmp_config.set("short_secret", "12345")
+        tmp_config.set("twitter_ct0", "abcdef123456789")
+        tmp_config.set("bilibili_sessdata", "sess123456789")
+        tmp_config.set("bilibili_csrf", "csrf456")
+        tmp_config.set("xhs_cookie", "cookie_val_long")
+        tmp_config.set("empty_token", "")
+        tmp_config.set("unrelated_mode", "visible")
+
+        masked = tmp_config.to_dict()
+        assert masked["short_secret"] == "****"
+        assert masked["twitter_ct0"] == "abcdef12..."
+        assert masked["bilibili_sessdata"] == "sess1234..."
+        assert masked["bilibili_csrf"] == "****"
+        assert masked["xhs_cookie"] == "cookie_v..."
+        assert masked["empty_token"] is None
+        assert masked["unrelated_mode"] == "visible"
 
     def test_save_creates_file_with_restricted_permissions(self, tmp_path):
         import stat
