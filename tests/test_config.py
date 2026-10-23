@@ -91,3 +91,34 @@ class TestConfig:
             # File should be owner-only read/write (0o600)
             assert not (mode & stat.S_IRGRP), "group read should not be set"
             assert not (mode & stat.S_IROTH), "other read should not be set"
+
+
+def test_sync_xfetch_session_creates_secure_file(tmp_path, monkeypatch):
+    import json
+    import stat
+    import sys
+
+    from agent_reach.cookie_extract import _sync_xfetch_session
+
+    monkeypatch.setattr("os.path.expanduser", lambda path: str(tmp_path) if path == "~" else path)
+
+    _sync_xfetch_session("test_auth_token", "test_ct0")
+
+    session_file = tmp_path / ".config" / "xfetch" / "session.json"
+    xfetch_dir = session_file.parent
+
+    assert session_file.exists()
+    with open(session_file, "r", encoding="utf-8") as f:
+        data = json.load(f)
+    assert data["authToken"] == "test_auth_token"
+    assert data["ct0"] == "test_ct0"
+
+    if sys.platform != "win32":
+        dir_mode = xfetch_dir.stat().st_mode
+        file_mode = session_file.stat().st_mode
+        # Directory should be owner-only (0o700)
+        assert not (dir_mode & stat.S_IRGRP), "group read should not be set on xfetch dir"
+        assert not (dir_mode & stat.S_IROTH), "other read should not be set on xfetch dir"
+        # File should be owner-only read/write (0o600)
+        assert not (file_mode & stat.S_IRGRP), "group read should not be set on session file"
+        assert not (file_mode & stat.S_IROTH), "other read should not be set on session file"
