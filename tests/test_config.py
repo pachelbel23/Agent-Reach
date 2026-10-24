@@ -2,11 +2,8 @@
 """Tests for Agent Reach config module."""
 
 import os
-import tempfile
-from pathlib import Path
 
 import pytest
-import yaml
 
 from agent_reach.config import Config
 
@@ -21,7 +18,7 @@ def tmp_config(tmp_path):
 class TestConfig:
     def test_init_creates_dir(self, tmp_path):
         config_file = tmp_path / "subdir" / "config.yaml"
-        config = Config(config_path=config_file)
+        Config(config_path=config_file)
         assert config_file.parent.exists()
 
     def test_set_and_get(self, tmp_config):
@@ -91,3 +88,58 @@ class TestConfig:
             # File should be owner-only read/write (0o600)
             assert not (mode & stat.S_IRGRP), "group read should not be set"
             assert not (mode & stat.S_IROTH), "other read should not be set"
+
+    def test_save_enforces_permissions_on_existing_file(self, tmp_path):
+        import stat
+        import sys
+        if sys.platform == "win32":
+            pytest.skip("Permission tests are non-Windows only")
+
+        config_file = tmp_path / "existing_config.yaml"
+        # Pre-create file with open 0o644 permissions
+        config_file.write_text("initial: data\n")
+        os.chmod(config_file, 0o644)
+
+        config = Config(config_path=config_file)
+        config.set("secret_key", "my-secret")
+
+        mode = config_file.stat().st_mode
+        assert not (mode & stat.S_IRGRP), "group read should not be set"
+        assert not (mode & stat.S_IROTH), "other read should not be set"
+
+    def test_ensure_dir_enforces_directory_permissions(self, tmp_path):
+        import stat
+        import sys
+        if sys.platform == "win32":
+            pytest.skip("Permission tests are non-Windows only")
+
+        config_dir = tmp_path / "insecure_dir"
+        config_dir.mkdir(parents=True, exist_ok=True)
+        os.chmod(config_dir, 0o755)
+
+        config_file = config_dir / "config.yaml"
+        Config(config_path=config_file)
+
+        dir_mode = config_dir.stat().st_mode
+        assert not (dir_mode & stat.S_IRGRP), "group read on dir should not be set"
+        assert not (dir_mode & stat.S_IROTH), "other read on dir should not be set"
+
+    def test_to_dict_masks_short_secrets_and_cookies(self, tmp_config):
+        tmp_config.set("short_secret", "12345")
+        tmp_config.set("twitter_ct0", "abcdef123456789")
+        tmp_config.set("bilibili_sessdata", "sess_val_987654321")
+        tmp_config.set("bilibili_csrf", "csrf1234")
+        tmp_config.set("xhs_cookie", "short")
+        tmp_config.set("empty_secret", "")
+        tmp_config.set("none_secret", None)
+        tmp_config.set("custom_val", "unrelated")
+
+        masked = tmp_config.to_dict()
+        assert masked["short_secret"] == "****"
+        assert masked["twitter_ct0"] == "abcdef12..."
+        assert masked["bilibili_sessdata"] == "sess_val..."
+        assert masked["bilibili_csrf"] == "csrf1234..."
+        assert masked["xhs_cookie"] == "****"
+        assert masked["empty_secret"] == ""
+        assert masked["none_secret"] is None
+        assert masked["custom_val"] == "unrelated"
