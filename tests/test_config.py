@@ -79,6 +79,26 @@ class TestConfig:
         assert masked["exa_api_key"] == "super-se..."
         assert masked["normal_setting"] == "visible"
 
+    def test_to_dict_masks_short_secrets_and_cookies(self, tmp_config):
+        tmp_config.set("short_secret_key", "12345")
+        tmp_config.set("twitter_ct0", "abcdef123456")
+        tmp_config.set("bilibili_sessdata", "sess_data_value_long")
+        tmp_config.set("bilibili_csrf", "bili_jct_val")
+        tmp_config.set("xhs_cookie", "a=1; b=2")
+        tmp_config.set("bili_jct", "short")
+        tmp_config.set("empty_secret", "")
+        tmp_config.set("false_value", False)
+
+        masked = tmp_config.to_dict()
+        assert masked["short_secret_key"] == "****"
+        assert masked["twitter_ct0"] == "abcdef12..."
+        assert masked["bilibili_sessdata"] == "sess_dat..."
+        assert masked["bilibili_csrf"] == "bili_jct..."
+        assert masked["xhs_cookie"] == "a=1; b=2..."
+        assert masked["bili_jct"] == "****"
+        assert masked["empty_secret"] == ""
+        assert masked["false_value"] is False
+
     def test_save_creates_file_with_restricted_permissions(self, tmp_path):
         import stat
         import sys
