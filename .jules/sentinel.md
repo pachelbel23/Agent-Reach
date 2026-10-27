@@ -1,0 +1,4 @@
+## 2025-02-23 - Masking Sensitive Config Session Tokens & Short Secrets
+**Vulnerability:** `Config.to_dict()` did not include session/cookie identifiers (`xhs_cookie`, `twitter_ct0`, `bilibili_sessdata`, `bilibili_csrf`) in sensitive keywords and leaked short secret values (<8 chars) completely when slicing `str(v)[:8]`.
+**Learning:** Generic security masking keywords (`key`, `token`, `password`, `proxy`) fail to cover platform-specific cookie and session credential naming conventions. Slicing strings shorter than the slice length without checking original string length leaks full secrets.
+**Prevention:** Maintain a comprehensive keyword list for credential masking (`secret`, `cookie`, `auth`, `credential`, `session`, `ct0`, `sessdata`, `csrf`) and mask short strings with fixed-width replacement (`****`).
