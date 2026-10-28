@@ -10,11 +10,14 @@ _URL_CREDENTIALS_RE = re.compile(
 _BARE_USERINFO_RE = re.compile(
     r"(?<![A-Za-z0-9._%+\-])[^:/\s@]+:[^/\s@]+@(?=[A-Za-z0-9.\-\[])"
 )
+# Redact sensitive parameters (including tokens, keys, secrets, session IDs, and auth headers)
+# from URLs in diagnostic logs and error responses to prevent credential exposure.
 _URL_QUERY_SECRET_RE = re.compile(
     r"([?&#](?:"
-    r"access[_-]?token|auth[_-]?token|token|bearer|"
-    r"api[_-]?key|key|password|passwd|secret|"
-    r"signature|sig|session(?:id)?|cookie|credential"
+    r"(?:[a-z0-9_.-]*[_-])?"
+    r"(?:access[_-]?token|refresh[_-]?token|id[_-]?token|auth(?:orization)?(?:[_-]?token)?|token|bearer|"
+    r"api[_-]?key|x[_-]?api[_-]?key|key|password|passwd|passcode|secret|client[_-]?secret|app[_-]?secret|private[_-]?key|"
+    r"signature|sig|session(?:[_-]?token|[_-]?id)?|cookie|credential)"
     r")=)[^&#\s]*",
     re.IGNORECASE,
 )
