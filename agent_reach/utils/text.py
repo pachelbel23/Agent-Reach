@@ -12,8 +12,8 @@ _BARE_USERINFO_RE = re.compile(
 )
 _URL_QUERY_SECRET_RE = re.compile(
     r"([?&#](?:"
-    r"access[_-]?token|auth[_-]?token|token|bearer|"
-    r"api[_-]?key|key|password|passwd|secret|"
+    r"access[_-]?token|refresh[_-]?token|id[_-]?token|auth[_-]?token|session[_-]?token|token|bearer|"
+    r"authorization|auth|api[_-]?key|x[_-]?api[_-]?key|key|password|passwd|client[_-]?secret|app[_-]?secret|private[_-]?key|secret|"
     r"signature|sig|session(?:id)?|cookie|credential"
     r")=)[^&#\s]*",
     re.IGNORECASE,
