@@ -14,7 +14,7 @@ from agent_reach.channels.xiaohongshu import XiaoHongShuChannel
 from agent_reach.channels.xiaoyuzhou import XiaoyuzhouChannel
 from agent_reach.channels.xueqiu import XueqiuChannel
 from agent_reach.channels.youtube import YouTubeChannel
-from agent_reach.utils.url import host_matches
+from agent_reach.utils.url import host_matches, normalize_public_http_url
 
 
 @pytest.mark.parametrize(
@@ -137,3 +137,31 @@ def test_fixed_domain_channels_reject_suffix_lookalikes_and_userinfo(
 )
 def test_host_matches_rejects_invalid_ports(malicious_url):
     assert not host_matches(malicious_url, "x.com")
+
+
+@pytest.mark.parametrize(
+    "malicious_ip_url",
+    [
+        "http://[::127.0.0.1]/",
+        "http://[::169.254.169.254]/",
+        "http://[::ffff:0:127.0.0.1]/",
+        "http://[::ffff:0:169.254.169.254]/",
+        "http://[64:ff9b::127.0.0.1]/",
+        "http://[64:ff9b::169.254.169.254]/",
+    ],
+)
+def test_normalize_public_http_url_rejects_embedded_private_ipv4(malicious_ip_url):
+    with pytest.raises(ValueError, match="only public HTTP\\(S\\) URLs are allowed"):
+        normalize_public_http_url(malicious_ip_url)
+
+
+@pytest.mark.parametrize(
+    "valid_public_ip_url",
+    [
+        "http://8.8.8.8/",
+        "http://[64:ff9b::8.8.8.8]/",
+        "http://[2607:f8b0:4005:805::200e]/",
+    ],
+)
+def test_normalize_public_http_url_allows_public_ips(valid_public_ip_url):
+    assert normalize_public_http_url(valid_public_ip_url) == valid_public_ip_url
