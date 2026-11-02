@@ -44,6 +44,37 @@ def _literal_ip_address(
     return ipaddress.IPv4Address(packed)
 
 
+def _embedded_ipv4(addr: ipaddress.IPv6Address) -> ipaddress.IPv4Address | None:
+    """Extract embedded IPv4 addresses from compatible/translated IPv6 literals."""
+    if addr.ipv4_mapped:
+        return addr.ipv4_mapped
+    if addr.sixtofour:
+        return addr.sixtofour
+    if addr.teredo:
+        return addr.teredo[1]
+    # IPv4-compatible (::/96)
+    if (addr._ip >> 32) == 0:
+        return ipaddress.IPv4Address(addr._ip & 0xFFFFFFFF)
+    # IPv4-translated (::ffff:0:0:0/96, RFC 6052 / RFC 6145)
+    if (addr._ip >> 32) == 0xFFFF0000:
+        return ipaddress.IPv4Address(addr._ip & 0xFFFFFFFF)
+    # NAT64 well-known prefix (64:ff9b::/96)
+    if (addr._ip >> 32) == (0x0064FF9B << 64):
+        return ipaddress.IPv4Address(addr._ip & 0xFFFFFFFF)
+    return None
+
+
+def _is_public_ip(addr: ipaddress.IPv4Address | ipaddress.IPv6Address) -> bool:
+    """Ensure IP address is globally routable, including embedded IPv4 forms."""
+    if not addr.is_global:
+        return False
+    if isinstance(addr, ipaddress.IPv6Address):
+        embedded = _embedded_ipv4(addr)
+        if embedded is not None and not embedded.is_global:
+            return False
+    return True
+
+
 def normalize_public_http_url(url: str) -> str:
     """Normalize a URL or reject targets that are not clearly public HTTP(S)."""
     candidate = str(url or "").strip()
@@ -77,7 +108,7 @@ def normalize_public_http_url(url: str) -> str:
         or host in _BLOCKED_PUBLIC_FETCH_HOSTS
         or host.endswith(_BLOCKED_PUBLIC_FETCH_SUFFIXES)
         or ("." not in host and literal_address is None)
-        or (literal_address is not None and not literal_address.is_global)
+        or (literal_address is not None and not _is_public_ip(literal_address))
     ):
         raise ValueError("only public HTTP(S) URLs are allowed")
 
