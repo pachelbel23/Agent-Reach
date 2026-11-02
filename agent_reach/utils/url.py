@@ -52,15 +52,16 @@ def _embedded_ipv4(addr: ipaddress.IPv6Address) -> ipaddress.IPv4Address | None:
         return addr.sixtofour
     if addr.teredo:
         return addr.teredo[1]
+    ip_int = int(addr)
     # IPv4-compatible (::/96)
-    if (addr._ip >> 32) == 0:
-        return ipaddress.IPv4Address(addr._ip & 0xFFFFFFFF)
+    if (ip_int >> 32) == 0:
+        return ipaddress.IPv4Address(ip_int & 0xFFFFFFFF)
     # IPv4-translated (::ffff:0:0:0/96, RFC 6052 / RFC 6145)
-    if (addr._ip >> 32) == 0xFFFF0000:
-        return ipaddress.IPv4Address(addr._ip & 0xFFFFFFFF)
+    if (ip_int >> 32) == 0xFFFF0000:
+        return ipaddress.IPv4Address(ip_int & 0xFFFFFFFF)
     # NAT64 well-known prefix (64:ff9b::/96)
-    if (addr._ip >> 32) == (0x0064FF9B << 64):
-        return ipaddress.IPv4Address(addr._ip & 0xFFFFFFFF)
+    if (ip_int >> 32) == (0x0064FF9B << 64):
+        return ipaddress.IPv4Address(ip_int & 0xFFFFFFFF)
     return None
 
 
