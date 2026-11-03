@@ -14,7 +14,7 @@ from agent_reach.channels.xiaohongshu import XiaoHongShuChannel
 from agent_reach.channels.xiaoyuzhou import XiaoyuzhouChannel
 from agent_reach.channels.xueqiu import XueqiuChannel
 from agent_reach.channels.youtube import YouTubeChannel
-from agent_reach.utils.url import host_matches
+from agent_reach.utils.url import host_matches, normalize_public_http_url
 
 
 @pytest.mark.parametrize(
@@ -137,3 +137,37 @@ def test_fixed_domain_channels_reject_suffix_lookalikes_and_userinfo(
 )
 def test_host_matches_rejects_invalid_ports(malicious_url):
     assert not host_matches(malicious_url, "x.com")
+
+
+@pytest.mark.parametrize(
+    "private_ipv6_url",
+    [
+        "http://[::127.0.0.1]/status",
+        "http://[::10.0.0.1]/private",
+        "http://[::169.254.169.254]/latest/meta-data",
+        "http://[::ffff:0:127.0.0.1]/status",
+        "http://[::ffff:0:10.0.0.1]/private",
+        "http://[::ffff:0:169.254.169.254]/latest/meta-data",
+        "http://[64:ff9b::127.0.0.1]/status",
+        "http://[64:ff9b::10.0.0.1]/private",
+        "http://[64:ff9b::169.254.169.254]/latest/meta-data",
+        "http://[::ffff:127.0.0.1]/status",
+    ],
+)
+def test_normalize_public_http_url_rejects_embedded_private_ipv4(private_ipv6_url):
+    with pytest.raises(ValueError, match="public HTTP"):
+        normalize_public_http_url(private_ipv6_url)
+
+
+@pytest.mark.parametrize(
+    "public_ipv6_url",
+    [
+        "http://[::8.8.8.8]/dns",
+        "http://[::ffff:0:8.8.8.8]/dns",
+        "http://[64:ff9b::8.8.8.8]/dns",
+        "http://[::ffff:8.8.8.8]/dns",
+        "https://[2001:4860:4860::8888]/dns",
+    ],
+)
+def test_normalize_public_http_url_allows_embedded_public_ipv4(public_ipv6_url):
+    assert normalize_public_http_url(public_ipv6_url) == public_ipv6_url
