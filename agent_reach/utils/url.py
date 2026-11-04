@@ -44,6 +44,26 @@ def _literal_ip_address(
     return ipaddress.IPv4Address(packed)
 
 
+def _is_public_ip(addr: ipaddress.IPv4Address | ipaddress.IPv6Address) -> bool:
+    """Check if an IP address is global, unpacking IPv4-embedded IPv6 addresses."""
+    if not addr.is_global:
+        return False
+    if isinstance(addr, ipaddress.IPv6Address):
+        if addr.ipv4_mapped:
+            return addr.ipv4_mapped.is_global
+        raw = int(addr)
+        # IPv4-compatible (::a.b.c.d)
+        if (raw >> 32) == 0 and raw > 1:
+            return ipaddress.IPv4Address(raw & 0xFFFFFFFF).is_global
+        # IPv4-translated (::ffff:0:a.b.c.d, RFC 6052 / RFC 6145)
+        if (raw >> 32) == 0xFFFF0000:
+            return ipaddress.IPv4Address(raw & 0xFFFFFFFF).is_global
+        # NAT64 well-known prefix (64:ff9b::a.b.c.d, RFC 6052)
+        if (raw >> 32) == (0x0064FF9B << 64):
+            return ipaddress.IPv4Address(raw & 0xFFFFFFFF).is_global
+    return True
+
+
 def normalize_public_http_url(url: str) -> str:
     """Normalize a URL or reject targets that are not clearly public HTTP(S)."""
     candidate = str(url or "").strip()
@@ -77,7 +97,7 @@ def normalize_public_http_url(url: str) -> str:
         or host in _BLOCKED_PUBLIC_FETCH_HOSTS
         or host.endswith(_BLOCKED_PUBLIC_FETCH_SUFFIXES)
         or ("." not in host and literal_address is None)
-        or (literal_address is not None and not literal_address.is_global)
+        or (literal_address is not None and not _is_public_ip(literal_address))
     ):
         raise ValueError("only public HTTP(S) URLs are allowed")
 
