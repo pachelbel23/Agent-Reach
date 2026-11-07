@@ -14,7 +14,7 @@ from agent_reach.channels.xiaohongshu import XiaoHongShuChannel
 from agent_reach.channels.xiaoyuzhou import XiaoyuzhouChannel
 from agent_reach.channels.xueqiu import XueqiuChannel
 from agent_reach.channels.youtube import YouTubeChannel
-from agent_reach.utils.url import host_matches
+from agent_reach.utils.url import host_matches, normalize_public_http_url
 
 
 @pytest.mark.parametrize(
@@ -137,3 +137,41 @@ def test_fixed_domain_channels_reject_suffix_lookalikes_and_userinfo(
 )
 def test_host_matches_rejects_invalid_ports(malicious_url):
     assert not host_matches(malicious_url, "x.com")
+
+
+@pytest.mark.parametrize(
+    "private_ipv6_url",
+    [
+        "http://[::127.0.0.1]/",
+        "https://[::10.0.0.1]/status",
+        "http://[::192.168.1.1]/api",
+        "http://[::169.254.169.254]/latest/meta-data/",
+        "http://[::ffff:0:127.0.0.1]/",
+        "https://[::ffff:0:10.0.0.1]/status",
+        "http://[::ffff:0:169.254.169.254]/latest/meta-data/",
+        "http://[64:ff9b::127.0.0.1]/",
+        "https://[64:ff9b::10.0.0.1]/status",
+        "http://[64:ff9b::192.168.1.1]/api",
+        "http://[64:ff9b::169.254.169.254]/latest/meta-data/",
+        "http://[::ffff:127.0.0.1]/",
+        "http://[::ffff:10.0.0.1]/",
+    ],
+)
+def test_normalize_public_http_url_rejects_embedded_private_ipv4(private_ipv6_url):
+    with pytest.raises(ValueError, match="only public HTTP\\(S\\) URLs are allowed"):
+        normalize_public_http_url(private_ipv6_url)
+
+
+@pytest.mark.parametrize(
+    ("valid_public_url", "expected"),
+    [
+        ("https://example.com/test", "https://example.com/test"),
+        ("http://8.8.8.8/dns-query", "http://8.8.8.8/dns-query"),
+        ("http://[2607:f8b0:4005:805::200e]/", "http://[2607:f8b0:4005:805::200e]/"),
+        ("http://[64:ff9b::8.8.8.8]/", "http://[64:ff9b::8.8.8.8]/"),
+        ("http://[::8.8.8.8]/", "http://[::8.8.8.8]/"),
+        ("http://[::ffff:0:8.8.8.8]/", "http://[::ffff:0:8.8.8.8]/"),
+    ],
+)
+def test_normalize_public_http_url_allows_public_targets(valid_public_url, expected):
+    assert normalize_public_http_url(valid_public_url) == expected
