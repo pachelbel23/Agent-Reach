@@ -1,0 +1,5 @@
+## 2026-03-31 - IPv4-embedded IPv6 SSRF Filter Bypass
+
+**Vulnerability:** In `normalize_public_http_url`, Python's `ipaddress.IPv6Address.is_global` property was relied upon to block non-global/private IP addresses. However, `is_global` evaluates to `True` for IPv4-compatible (`::/96`), IPv4-translated (`::ffff:0:0/96`), and NAT64 (`64:ff9b::/96`) addresses even when they wrap private/loopback IPv4 addresses (such as `127.0.0.1`, `10.0.0.0/8`, or `169.254.169.254`), allowing attackers to bypass SSRF defenses.
+**Learning:** `ipaddress.IPv6Address.is_global` only checks global scope at the IPv6 layer and does not unpack embedded IPv4 payloads across standard transition prefixes. In addition, typeshed does not define private attributes like `_ip` on `IPv6Address`, so using `int(addr)` is required for clean static type analysis with mypy.
+**Prevention:** Always extract and validate the 32-bit embedded IPv4 address for IPv4-compatible, IPv4-mapped, IPv4-translated, and NAT64 addresses whenever performing SSRF validations on IPv6 literals.

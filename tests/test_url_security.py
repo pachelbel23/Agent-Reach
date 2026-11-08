@@ -14,7 +14,7 @@ from agent_reach.channels.xiaohongshu import XiaoHongShuChannel
 from agent_reach.channels.xiaoyuzhou import XiaoyuzhouChannel
 from agent_reach.channels.xueqiu import XueqiuChannel
 from agent_reach.channels.youtube import YouTubeChannel
-from agent_reach.utils.url import host_matches
+from agent_reach.utils.url import host_matches, normalize_public_http_url
 
 
 @pytest.mark.parametrize(
@@ -137,3 +137,37 @@ def test_fixed_domain_channels_reject_suffix_lookalikes_and_userinfo(
 )
 def test_host_matches_rejects_invalid_ports(malicious_url):
     assert not host_matches(malicious_url, "x.com")
+
+
+@pytest.mark.parametrize(
+    "blocked_url",
+    [
+        "http://[::127.0.0.1]/status",
+        "http://[::10.0.0.1]/status",
+        "http://[::192.168.1.1]/status",
+        "http://[::ffff:0:127.0.0.1]/status",
+        "http://[::ffff:0:10.0.0.1]/status",
+        "http://[::ffff:0:169.254.169.254]/latest/meta-data",
+        "http://[64:ff9b::127.0.0.1]/status",
+        "http://[64:ff9b::10.0.0.1]/status",
+        "http://[64:ff9b::169.254.169.254]/latest/meta-data",
+        "http://[64:ff9b::192.168.0.1]/status",
+        "http://[::ffff:127.0.0.1]/status",
+    ],
+)
+def test_normalize_public_http_url_rejects_embedded_private_ipv4(blocked_url):
+    with pytest.raises(ValueError, match="only public HTTP"):
+        normalize_public_http_url(blocked_url)
+
+
+@pytest.mark.parametrize(
+    ("allowed_url", "expected"),
+    [
+        ("http://[::8.8.8.8]/status", "http://[::8.8.8.8]/status"),
+        ("http://[::ffff:0:8.8.8.8]/status", "http://[::ffff:0:8.8.8.8]/status"),
+        ("http://[64:ff9b::8.8.8.8]/status", "http://[64:ff9b::8.8.8.8]/status"),
+        ("https://[2607:f8b0:4005:805::200e]/status", "https://[2607:f8b0:4005:805::200e]/status"),
+    ],
+)
+def test_normalize_public_http_url_allows_embedded_public_ipv4(allowed_url, expected):
+    assert normalize_public_http_url(allowed_url) == expected
