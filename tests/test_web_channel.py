@@ -191,6 +191,13 @@ def test_read_decodes_utf8_body():
         "http://2852039166/latest/meta-data",
         "http://0xA9FEA9FE/latest/meta-data",
         "http://[::1]/private",
+        "http://[::127.0.0.1]/private",
+        "http://[::ffff:0:127.0.0.1]/private",
+        "http://[::ffff:0:169.254.169.254]/latest/meta-data",
+        "http://[64:ff9b::127.0.0.1]/private",
+        "http://[64:ff9b::10.0.0.1]/private",
+        "http://[64:ff9b::169.254.169.254]/latest/meta-data",
+        "http://[64:ff9b::192.168.1.1]/private",
         "http://[::ffff:127.0.0.1]/private",
         "http://localhost./admin",
         "http://127.0.0.1\\example.com/private",
@@ -207,7 +214,17 @@ def test_read_rejects_non_public_urls_before_network(url):
     mock_open.assert_not_called()
 
 
-@pytest.mark.parametrize("url", ["https://8.8.8.8/page", "http://010.010.010.010/page"])
+@pytest.mark.parametrize(
+    "url",
+    [
+        "https://8.8.8.8/page",
+        "http://010.010.010.010/page",
+        "http://[::8.8.8.8]/page",
+        "http://[::ffff:0:8.8.8.8]/page",
+        "http://[64:ff9b::8.8.8.8]/page",
+        "https://[2607:f8b0:4005:805::200e]/page",
+    ],
+)
 def test_read_allows_public_literal_addresses(url):
     channel = WebChannel()
     with patch("urllib.request.urlopen", return_value=_resp()) as mock_open:
