@@ -14,7 +14,7 @@ from agent_reach.channels.xiaohongshu import XiaoHongShuChannel
 from agent_reach.channels.xiaoyuzhou import XiaoyuzhouChannel
 from agent_reach.channels.xueqiu import XueqiuChannel
 from agent_reach.channels.youtube import YouTubeChannel
-from agent_reach.utils.url import host_matches
+from agent_reach.utils.url import host_matches, normalize_public_http_url
 
 
 @pytest.mark.parametrize(
@@ -137,3 +137,37 @@ def test_fixed_domain_channels_reject_suffix_lookalikes_and_userinfo(
 )
 def test_host_matches_rejects_invalid_ports(malicious_url):
     assert not host_matches(malicious_url, "x.com")
+
+
+@pytest.mark.parametrize(
+    "ssrf_url",
+    [
+        "http://[::127.0.0.1]/",
+        "http://[::10.0.0.1]/path",
+        "http://[::169.254.169.254]/latest/meta-data/",
+        "http://[::ffff:0:127.0.0.1]/",
+        "http://[::ffff:0:192.168.1.1]/admin",
+        "http://[64:ff9b::127.0.0.1]/",
+        "http://[64:ff9b::10.0.0.1]/internal",
+        "http://[64:ff9b::169.254.169.254]/",
+        "http://[::ffff:127.0.0.1]/",
+        "http://[::ffff:10.0.0.1]/",
+    ],
+)
+def test_normalize_public_http_url_rejects_embedded_private_ipv4(ssrf_url):
+    with pytest.raises(ValueError, match="only public HTTP\\(S\\) URLs are allowed"):
+        normalize_public_http_url(ssrf_url)
+
+
+@pytest.mark.parametrize(
+    ("public_url", "expected"),
+    [
+        ("http://[2607:f8b0:4005:805::200e]/", "http://[2607:f8b0:4005:805::200e]/"),
+        ("https://8.8.8.8/dns-query", "https://8.8.8.8/dns-query"),
+        ("http://[::8.8.8.8]/", "http://[::8.8.8.8]/"),
+        ("http://[64:ff9b::8.8.8.8]/", "http://[64:ff9b::8.8.8.8]/"),
+        ("http://[::ffff:8.8.8.8]/", "http://[::ffff:8.8.8.8]/"),
+    ],
+)
+def test_normalize_public_http_url_accepts_public_addresses(public_url, expected):
+    assert normalize_public_http_url(public_url) == expected
