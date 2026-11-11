@@ -137,3 +137,35 @@ def test_fixed_domain_channels_reject_suffix_lookalikes_and_userinfo(
 )
 def test_host_matches_rejects_invalid_ports(malicious_url):
     assert not host_matches(malicious_url, "x.com")
+
+
+@pytest.mark.parametrize(
+    "embedded_v4_url",
+    [
+        "http://[::127.0.0.1]/",
+        "http://[::ffff:0:127.0.0.1]/",
+        "http://[::ffff:0:10.0.0.1]/",
+        "http://[64:ff9b::127.0.0.1]/",
+        "http://[64:ff9b::169.254.169.254]/",
+    ],
+)
+def test_normalize_public_http_url_rejects_embedded_private_ipv4(embedded_v4_url):
+    from agent_reach.utils.url import normalize_public_http_url
+
+    with pytest.raises(ValueError, match="only public HTTP"):
+        normalize_public_http_url(embedded_v4_url)
+
+
+@pytest.mark.parametrize(
+    "embedded_v4_url",
+    [
+        "http://[::8.8.8.8]/",
+        "http://[::ffff:0:8.8.8.8]/",
+        "http://[64:ff9b::8.8.8.8]/",
+        "http://[2001:4860:4860::8888]/",
+    ],
+)
+def test_normalize_public_http_url_allows_embedded_public_ipv4(embedded_v4_url):
+    from agent_reach.utils.url import normalize_public_http_url
+
+    assert normalize_public_http_url(embedded_v4_url) == embedded_v4_url
